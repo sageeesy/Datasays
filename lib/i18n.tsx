@@ -1,0 +1,258 @@
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+
+export type Language = "zh" | "en";
+
+const messages = {
+  zh: {
+    analysis: "可信分析",
+    comparison: "对比实验",
+    dashboard: "数据看板",
+    upload: "上传数据",
+    conversations: "分析记录",
+    newChat: "新建分析",
+    noConversations: "还没有分析记录",
+    closeConversations: "关闭分析记录",
+    rename: "重命名",
+    delete: "删除",
+    justNow: "刚刚",
+    messages: "条消息",
+    uploadToStart: "上传数据后开始分析",
+    newConversation: "新分析",
+    model: "模型",
+    prompt: "提示策略",
+    analysisProgress: "正在分析",
+    progressHint: "结果返回后将展示真实执行轨迹。",
+    starting: "正在启动…",
+    elapsed: "已用 {seconds} 秒",
+    verifiedAnswer: "可信答案",
+    verified: "已验证",
+    failed: "失败",
+    running: "运行中",
+    viewDashboard: "查看数据看板",
+    dashboardUnavailable: "当前结果没有可视化明细",
+    evidence: "证据与验证",
+    confidence: "{level} 置信度",
+    notValidated: "尚未验证",
+    metricDefinitions: "指标定义",
+    missingConcepts: "缺少字段概念",
+    analysisPlan: "分析计划",
+    intent: "意图",
+    aggregation: "聚合方式",
+    columns: "使用字段",
+    filters: "筛选条件",
+    none: "无",
+    unspecified: "未指定",
+    executionArtifact: "执行证据",
+    metric: "指标",
+    adHoc: "临时计算",
+    columnsUsed: "实际使用字段",
+    notReported: "未报告",
+    assumptions: "假设与限制",
+    checks: "验证检查",
+    resultDetails: "结果明细",
+    features: "对比指标",
+    validationPassed: "验证通过",
+    validationFailed: "验证未通过",
+    failureReason: "失败原因",
+    repairAdvice: "修改建议",
+    traceStep: "步骤",
+    traceObservation: "执行记录",
+    workflowTrace: "查看 Agent 执行轨迹",
+    selectedSkills: "已选择的分析技能",
+    reasoningSummary: "查看推理摘要",
+    generatedCode: "查看生成的 Python 代码",
+    askDataSays: "向 DataSays 提问",
+    followUp: "继续追问",
+    sendHint: "Enter 发送 · Shift + Enter 换行",
+    usingFiles: "使用文件",
+    askPlaceholder: "输入关于数据的问题…",
+    uploadPlaceholder: "请先上传 CSV 文件",
+    emptyTitle: "把 CSV 变成可信结论",
+    emptyReady: "文件已准备好。使用自然语言提问，DataSays 会计算、验证并展示证据。",
+    emptyUpload: "上传数据并使用自然语言提问，DataSays 会返回经过执行验证的答案。",
+    uploadFirst: "上传第一个 CSV",
+    csvLimit: "CSV 文件，单个不超过 50MB",
+    examples: "例如：“哪个渠道表现最好？”或“按月展示销售趋势。”",
+    currentContext: "当前数据",
+    contextDescription: "本次分析使用的文件",
+    activeFiles: "已选文件",
+    noFiles: "尚未选择文件",
+    recentUploads: "最近上传",
+    preview: "数据预览",
+    showingRows: "显示 {shown}/{total} 行 · {columns} 列",
+    compareTitle: "模型与提示策略对比",
+    compareDescription: "使用同一问题运行 3 个模型 × 3 种提示策略，并比较成功率、耗时和输出。",
+    backToAnalysis: "返回可信分析",
+    dashboardTitle: "可信结果数据看板",
+    dashboardDescription: "基于沙箱返回的结构化明细进行交互式探索。",
+    noDashboard: "还没有可视化结果",
+    noDashboardDescription: "在可信分析中运行包含分组、趋势或明细表的问题，然后点击“查看数据看板”。",
+    dimension: "维度",
+    measure: "指标值",
+    chartType: "图表类型",
+    bar: "柱状图",
+    line: "折线图",
+    table: "数据表",
+    sort: "排序",
+    descending: "从高到低",
+    ascending: "从低到高",
+    records: "数据点",
+    total: "合计",
+    average: "平均值",
+    sourceQuestion: "来源问题",
+    openAnalysis: "前往可信分析",
+    language: "语言",
+    chinese: "中文",
+    english: "English",
+    loadingDeveloper: "正在加载对比工具…",
+  },
+  en: {
+    analysis: "Verified Analysis",
+    comparison: "Comparison Lab",
+    dashboard: "Data Dashboard",
+    upload: "Upload data",
+    conversations: "Analysis history",
+    newChat: "New analysis",
+    noConversations: "No analysis history yet",
+    closeConversations: "Close analysis history",
+    rename: "Rename",
+    delete: "Delete",
+    justNow: "Just now",
+    messages: "messages",
+    uploadToStart: "Upload data to start",
+    newConversation: "New analysis",
+    model: "Model",
+    prompt: "Prompt strategy",
+    analysisProgress: "Analysis in progress",
+    progressHint: "The real execution trace appears when the result returns.",
+    starting: "Starting…",
+    elapsed: "{seconds}s elapsed",
+    verifiedAnswer: "Verified answer",
+    verified: "Verified",
+    failed: "Failed",
+    running: "Running",
+    viewDashboard: "View data dashboard",
+    dashboardUnavailable: "This result has no chartable detail",
+    evidence: "Evidence and validation",
+    confidence: "{level} confidence",
+    notValidated: "Not validated",
+    metricDefinitions: "Metric definitions",
+    missingConcepts: "Missing concepts",
+    analysisPlan: "Analysis plan",
+    intent: "Intent",
+    aggregation: "Aggregation",
+    columns: "Columns",
+    filters: "Filters",
+    none: "None",
+    unspecified: "Not specified",
+    executionArtifact: "Execution artifact",
+    metric: "Metric",
+    adHoc: "Ad hoc calculation",
+    columnsUsed: "Columns used",
+    notReported: "Not reported",
+    assumptions: "Assumptions and limitations",
+    checks: "Checks",
+    resultDetails: "Result details",
+    features: "Comparison metrics",
+    validationPassed: "Validation passed",
+    validationFailed: "Validation failed",
+    failureReason: "Failure reason",
+    repairAdvice: "Suggested changes",
+    traceStep: "Step",
+    traceObservation: "Execution record",
+    workflowTrace: "View agent workflow trace",
+    selectedSkills: "Selected analysis skills",
+    reasoningSummary: "View reasoning summary",
+    generatedCode: "View generated Python code",
+    askDataSays: "Ask DataSays",
+    followUp: "Ask a follow-up",
+    sendHint: "Enter to send · Shift + Enter for a new line",
+    usingFiles: "Using files",
+    askPlaceholder: "Ask a question about your data…",
+    uploadPlaceholder: "Upload a CSV file first",
+    emptyTitle: "Turn a CSV into a trusted conclusion",
+    emptyReady: "Your files are ready. Ask in plain language and DataSays will calculate, validate, and show the evidence.",
+    emptyUpload: "Upload data and ask in plain language. DataSays returns an execution-verified answer.",
+    uploadFirst: "Upload your first CSV",
+    csvLimit: "CSV files up to 50MB each",
+    examples: "Try “Which channel performs best?” or “Show monthly sales trends.”",
+    currentContext: "Current data",
+    contextDescription: "Files used in this analysis",
+    activeFiles: "Selected files",
+    noFiles: "No files selected",
+    recentUploads: "Recent uploads",
+    preview: "Data preview",
+    showingRows: "Showing {shown}/{total} rows · {columns} columns",
+    compareTitle: "Model and prompt comparison",
+    compareDescription: "Run the same question across 3 models × 3 prompt strategies and compare success, latency, and output.",
+    backToAnalysis: "Back to verified analysis",
+    dashboardTitle: "Verified result dashboard",
+    dashboardDescription: "Interactively explore structured rows returned by the sandbox.",
+    noDashboard: "No visualizable result yet",
+    noDashboardDescription: "Run a grouped, trend, or detail-table question in Verified Analysis, then select “View data dashboard.”",
+    dimension: "Dimension",
+    measure: "Measure",
+    chartType: "Chart type",
+    bar: "Bar",
+    line: "Line",
+    table: "Table",
+    sort: "Sort",
+    descending: "High to low",
+    ascending: "Low to high",
+    records: "Data points",
+    total: "Total",
+    average: "Average",
+    sourceQuestion: "Source question",
+    openAnalysis: "Open verified analysis",
+    language: "Language",
+    chinese: "中文",
+    english: "English",
+    loadingDeveloper: "Loading comparison tools…",
+  },
+} as const;
+
+type MessageKey = keyof typeof messages.en;
+type Variables = Record<string, string | number>;
+
+interface I18nValue {
+  language: Language;
+  setLanguage: (language: Language) => void;
+  t: (key: MessageKey, variables?: Variables) => string;
+}
+
+const I18nContext = createContext<I18nValue | null>(null);
+
+export function I18nProvider({ children }: { children: ReactNode }) {
+  const [language, setLanguageState] = useState<Language>(() => {
+    const stored = typeof window !== "undefined" ? window.localStorage.getItem("datasays-language") : null;
+    return stored === "en" ? "en" : "zh";
+  });
+
+  useEffect(() => {
+    document.documentElement.lang = language === "zh" ? "zh-CN" : "en";
+  }, [language]);
+
+  const value = useMemo<I18nValue>(() => ({
+    language,
+    setLanguage: (nextLanguage) => {
+      setLanguageState(nextLanguage);
+      window.localStorage.setItem("datasays-language", nextLanguage);
+      document.documentElement.lang = nextLanguage === "zh" ? "zh-CN" : "en";
+    },
+    t: (key, variables = {}) => {
+      let text: string = messages[language][key];
+      Object.entries(variables).forEach(([name, value]) => {
+        text = text.replace(`{${name}}`, String(value));
+      });
+      return text;
+    },
+  }), [language]);
+
+  return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
+}
+
+export function useI18n() {
+  const value = useContext(I18nContext);
+  if (!value) throw new Error("useI18n must be used inside I18nProvider");
+  return value;
+}

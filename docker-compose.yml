@@ -1,0 +1,49 @@
+services:
+  sandbox-image:
+    build:
+      context: ./server
+      dockerfile: Dockerfile.python-sandbox
+    image: datasays-python-sandbox:local
+    command: ["sh", "-c", "exit 0"]
+
+  backend:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    image: datasays-backend:local
+    environment:
+      PORT: 8000
+      FRONTEND_URL: http://localhost:8080
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?Set OPENROUTER_API_KEY before starting DataSays}
+      LLM_MODEL: ${LLM_MODEL:-qwen/qwen3.6-flash}
+      USE_DOCKER: "true"
+      DOCKER_IMAGE: datasays-python-sandbox:local
+      SANDBOX_TIMEOUT: ${SANDBOX_TIMEOUT:-30}
+      SANDBOX_WORK_DIR: /tmp/datasays-sandbox
+      DATASAYS_DB_PATH: /app/data/datasays.db
+    volumes:
+      - datasays_uploads:/app/uploads
+      - datasays_data:/app/data
+      # The nested sandbox container receives this path from the host Docker
+      # daemon, so it must be identical on the host and in the API container.
+      - /tmp/datasays-sandbox:/tmp/datasays-sandbox
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      sandbox-image:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    image: datasays-frontend:local
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  datasays_uploads:
+  datasays_data:

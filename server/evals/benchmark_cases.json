@@ -1,0 +1,269 @@
+{
+  "benchmark_name": "datasays_tabular_qa_mini",
+  "description": "A balanced closed-form benchmark inspired by DS-1000-style executable scoring and DABench/DABstep-style tabular data analysis tasks.",
+  "datasets": {
+    "sales": {
+      "path": "data/sales.csv"
+    },
+    "products": {
+      "path": "data/products.csv"
+    },
+    "diabetes_toy": {
+      "path": "data/diabetes_toy.csv"
+    },
+    "data_quality": {
+      "path": "data/data_quality.csv"
+    }
+  },
+  "defaults": {
+    "prompt_style": "zero",
+    "tolerance": 0.001
+  },
+  "cases": [
+    {
+      "id": "row_count",
+      "datasets": ["sales"],
+      "category": "basic_statistics",
+      "difficulty": "easy",
+      "inspired_by": ["DABench"],
+      "question": "How many data rows are in this CSV file? Return a single number.",
+      "expected_type": "number",
+      "expected_value": 5
+    },
+    {
+      "id": "average_sales",
+      "datasets": ["sales"],
+      "category": "basic_statistics",
+      "difficulty": "easy",
+      "inspired_by": ["DABench"],
+      "question": "What is the average Sales value across all rows? Return a single number.",
+      "expected_type": "number",
+      "expected_value": 1172
+    },
+    {
+      "id": "max_quantity",
+      "datasets": ["sales"],
+      "category": "basic_statistics",
+      "difficulty": "easy",
+      "inspired_by": ["DS-1000", "DABench"],
+      "question": "What is the maximum Quantity value? Return a single number.",
+      "expected_type": "number",
+      "expected_value": 52
+    },
+    {
+      "id": "south_sales_sum",
+      "datasets": ["sales"],
+      "category": "filter_aggregate",
+      "difficulty": "easy",
+      "inspired_by": ["DABench"],
+      "question": "What is the total Sales value for rows where Region is South? Return a single number.",
+      "expected_type": "number",
+      "expected_value": 1840
+    },
+    {
+      "id": "quantity_above_40_sales_sum",
+      "datasets": ["sales"],
+      "category": "filter_aggregate",
+      "difficulty": "easy",
+      "inspired_by": ["DABench"],
+      "question": "What is the total Sales value for rows where Quantity is greater than 40? Return a single number.",
+      "expected_type": "number",
+      "expected_value": 4020
+    },
+    {
+      "id": "widget_a_avg_quantity",
+      "datasets": ["sales"],
+      "category": "filter_aggregate",
+      "difficulty": "easy",
+      "inspired_by": ["DABench"],
+      "question": "What is the average Quantity for Product Widget A? Return a single number.",
+      "expected_type": "number",
+      "expected_value": 46.5
+    },
+    {
+      "id": "top_region_sales_total",
+      "datasets": ["sales"],
+      "category": "groupby_aggregate",
+      "difficulty": "medium",
+      "inspired_by": ["DABench", "DABstep"],
+      "question": "Group the sales data by Region. What is the highest total Sales value among all regions? Return a single number.",
+      "expected_type": "number",
+      "expected_value": 2570
+    },
+    {
+      "id": "lowest_product_sales_total",
+      "datasets": ["sales"],
+      "category": "groupby_aggregate",
+      "difficulty": "medium",
+      "inspired_by": ["DABench", "DABstep"],
+      "question": "Group the sales data by Product. What is the lowest total Sales value among all products? Return a single number.",
+      "expected_type": "number",
+      "expected_value": 1450
+    },
+    {
+      "id": "regions_above_1500_total_sales",
+      "datasets": ["sales"],
+      "category": "groupby_aggregate",
+      "difficulty": "medium",
+      "inspired_by": ["DABench", "DABstep"],
+      "question": "Group the sales data by Region and sum Sales. How many regions have total Sales greater than 1500? Return a single number.",
+      "expected_type": "number",
+      "expected_value": 2
+    },
+    {
+      "id": "date_range_days",
+      "datasets": ["sales"],
+      "category": "date_time_analysis",
+      "difficulty": "medium",
+      "inspired_by": ["DABstep"],
+      "question": "Using the Date column, how many days are between the earliest date and the latest date in the sales CSV? Return a single number.",
+      "expected_type": "number",
+      "expected_value": 4
+    },
+    {
+      "id": "sales_before_jan18",
+      "datasets": ["sales"],
+      "category": "date_time_analysis",
+      "difficulty": "medium",
+      "inspired_by": ["DABstep"],
+      "question": "Using the Date column, what is the total Sales value for rows before 2024-01-18? Return a single number.",
+      "expected_type": "number",
+      "expected_value": 3590
+    },
+    {
+      "id": "sales_on_or_after_jan17",
+      "datasets": ["sales"],
+      "category": "date_time_analysis",
+      "difficulty": "medium",
+      "inspired_by": ["DABstep"],
+      "question": "Using the Date column, what is the total Sales value for rows on or after 2024-01-17? Return a single number.",
+      "expected_type": "number",
+      "expected_value": 3720
+    },
+    {
+      "id": "hardware_profit_join",
+      "datasets": ["sales", "products"],
+      "category": "multi_table_join",
+      "difficulty": "medium",
+      "inspired_by": ["DABstep"],
+      "question": "Join the sales CSV with the products CSV on Product. Define row profit as Sales - UnitCost * Quantity. What is the total profit for rows where Category is Hardware? Return a single number.",
+      "expected_type": "number",
+      "expected_value": 1306
+    },
+    {
+      "id": "total_profit_join",
+      "datasets": ["sales", "products"],
+      "category": "multi_table_join",
+      "difficulty": "medium",
+      "inspired_by": ["DABstep"],
+      "question": "Join the sales CSV with the products CSV on Product. Define row profit as Sales - UnitCost * Quantity. What is the total profit across all rows? Return a single number.",
+      "expected_type": "number",
+      "expected_value": 2342
+    },
+    {
+      "id": "best_product_profit_join",
+      "datasets": ["sales", "products"],
+      "category": "multi_step_join_groupby",
+      "difficulty": "medium",
+      "inspired_by": ["DABstep"],
+      "question": "Join the sales CSV with the products CSV on Product. Define row profit as Sales - UnitCost * Quantity. Group by Product and find the highest total profit achieved by any product. Return only that highest profit value as a single number.",
+      "expected_type": "number",
+      "expected_value": 1036
+    },
+    {
+      "id": "missing_cell_count",
+      "datasets": ["data_quality"],
+      "category": "data_quality",
+      "difficulty": "easy",
+      "inspired_by": ["DABench", "DABstep"],
+      "question": "In the data_quality CSV, how many missing or blank cells are there across the entire table? Return a single number.",
+      "expected_type": "number",
+      "expected_value": 3
+    },
+    {
+      "id": "age_mean_zero_as_missing",
+      "datasets": ["data_quality"],
+      "category": "data_cleaning",
+      "difficulty": "medium",
+      "inspired_by": ["DABench", "DABstep"],
+      "question": "In the data_quality CSV, treat Age value 0 as missing and ignore blank Age values. What is the mean Age? Return a single number.",
+      "expected_type": "number",
+      "expected_value": 32.25
+    },
+    {
+      "id": "income_mean_ignore_missing",
+      "datasets": ["data_quality"],
+      "category": "data_quality",
+      "difficulty": "easy",
+      "inspired_by": ["DABench"],
+      "question": "In the data_quality CSV, what is the mean Income value when blank Income values are ignored? Return a single number.",
+      "expected_type": "number",
+      "expected_value": 58400
+    },
+    {
+      "id": "churn_rate",
+      "datasets": ["data_quality"],
+      "category": "filter_aggregate",
+      "difficulty": "easy",
+      "inspired_by": ["DABench"],
+      "question": "In the data_quality CSV, what fraction of rows have Churn equal to 1? Return a single number between 0 and 1.",
+      "expected_type": "number",
+      "expected_value": 0.333333,
+      "tolerance": 0.001
+    },
+    {
+      "id": "score_at_least_80_count",
+      "datasets": ["data_quality"],
+      "category": "filter_aggregate",
+      "difficulty": "easy",
+      "inspired_by": ["DABench"],
+      "question": "In the data_quality CSV, how many rows have Score greater than or equal to 80? Return a single number.",
+      "expected_type": "number",
+      "expected_value": 3
+    },
+    {
+      "id": "diabetes_majority_baseline_accuracy",
+      "datasets": ["diabetes_toy"],
+      "category": "basic_ml_workflow",
+      "difficulty": "easy",
+      "inspired_by": ["DS-1000", "MLE-bench"],
+      "question": "Using the diabetes_toy CSV, compute the majority-class baseline accuracy for predicting Outcome. If there is a tie between classes, use either majority count divided by total rows. Return a single number between 0 and 1.",
+      "expected_type": "number",
+      "expected_value": 0.5,
+      "tolerance": 0.0001
+    },
+    {
+      "id": "glucose_threshold_classifier_accuracy",
+      "datasets": ["diabetes_toy"],
+      "category": "basic_ml_workflow",
+      "difficulty": "medium",
+      "inspired_by": ["DS-1000", "MLE-bench"],
+      "question": "Using the diabetes_toy CSV, create a simple classifier that predicts Outcome=1 when Glucose is greater than or equal to 130, otherwise predicts 0. What is its accuracy on all rows? Return a single number between 0 and 1.",
+      "expected_type": "number",
+      "expected_value": 0.916667,
+      "tolerance": 0.001
+    },
+    {
+      "id": "bmi_threshold_classifier_accuracy",
+      "datasets": ["diabetes_toy"],
+      "category": "basic_ml_workflow",
+      "difficulty": "medium",
+      "inspired_by": ["DS-1000", "MLE-bench"],
+      "question": "Using the diabetes_toy CSV, create a simple classifier that predicts Outcome=1 when BMI is greater than or equal to 30, otherwise predicts 0. What is its accuracy on all rows? Return a single number between 0 and 1.",
+      "expected_type": "number",
+      "expected_value": 0.75,
+      "tolerance": 0.001
+    },
+    {
+      "id": "glucose_outcome_correlation",
+      "datasets": ["diabetes_toy"],
+      "category": "basic_ml_workflow",
+      "difficulty": "medium",
+      "inspired_by": ["DS-1000", "MLE-bench"],
+      "question": "Using the diabetes_toy CSV, compute the Pearson correlation between Glucose and Outcome. Return a single number.",
+      "expected_type": "number",
+      "expected_value": 0.640746,
+      "tolerance": 0.001
+    }
+  ]
+}

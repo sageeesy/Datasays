@@ -1,0 +1,72 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+.pnpm-store/
+.agents/
+.codex/
+.runtime/
+
+# Environment variables (包含敏感信息)
+.env
+.env.local
+.env.*.local
+.env.rtf
+server/.env
+server/.env.local
+server/.env.rtf
+server/.env.*
+
+# Uploads (用户上传的文件)
+server/uploads/*
+!server/uploads/.gitkeep
+server/data/
+server/venv/
+
+# Python
+__pycache__/
+.pytest_cache/
+.coverage
+htmlcov/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+*.egg-info/
+dist/
+build/
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+**/.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Temporary files
+*.tmp
+*.temp
+*.deps_installed
+server/.deps_installed
+
+# Documentation (keep only in docs/)
+# Don't ignore docs/ directory, but ignore duplicate docs in root
+# Note: Keep README.md files as they are project entry points

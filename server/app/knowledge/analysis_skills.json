@@ -1,0 +1,42 @@
+[
+  {
+    "id": "data_quality",
+    "name": "Data Quality",
+    "description": "Assess whether the dataset is trustworthy enough for the requested analysis.",
+    "triggers": ["missing", "null", "duplicate", "quality", "clean", "outlier", "invalid", "缺失", "空值", "重复", "质量", "清洗", "异常值"],
+    "required_profile": ["grain", "types", "null_rates", "distinct_counts", "duplicate_rate"],
+    "plan_rules": ["Confirm the unit of analysis before interpreting anomalies.", "Report rates as well as counts.", "Separate invalid values from acceptable sparsity."],
+    "validation_rules": ["Quantify every reported issue.", "Do not silently drop rows or impute values.", "Tie each issue to an analytical risk."],
+    "output_contract": ["dataset grain", "checks performed", "findings", "severity", "recommended remediation"]
+  },
+  {
+    "id": "aggregation_ranking",
+    "name": "Aggregation and Ranking",
+    "description": "Compute totals, averages, shares, grouped comparisons, and top or bottom rankings.",
+    "triggers": ["average", "mean", "sum", "total", "count", "share", "top", "bottom", "rank", "group", "平均", "总", "数量", "占比", "最高", "最低", "排名", "分组"],
+    "required_profile": ["types", "candidate_measures", "candidate_dimensions"],
+    "plan_rules": ["Identify the measure, aggregation, grouping dimensions, and filters explicitly.", "State whether nulls are excluded by the aggregation.", "Use deterministic tie handling for rankings."],
+    "validation_rules": ["Verify grouped values reconcile to the requested total when applicable.", "Verify the sort direction and requested N.", "Preserve the requested unit."],
+    "output_contract": ["primary result", "grouped evidence", "filters", "caveats"]
+  },
+  {
+    "id": "time_series_cohort",
+    "name": "Time Series and Cohort",
+    "description": "Analyze trends, period comparisons, retention, and cohort behavior.",
+    "triggers": ["trend", "date", "month", "week", "day", "growth", "retention", "cohort", "repeat", "趋势", "日期", "月", "周", "增长", "留存", "同期", "复购"],
+    "required_profile": ["date_ranges", "date_parse_rates", "candidate_entities"],
+    "plan_rules": ["Define the time field, timezone assumption, analysis window, and grain.", "Exclude incomplete periods unless the user explicitly requests them.", "For cohorts, define both the entry event and return event."],
+    "validation_rules": ["Check that dates were parsed successfully.", "Do not compare partial periods with complete periods without warning.", "Use eligible cohorts only in retention denominators."],
+    "output_contract": ["analysis window", "time grain", "trend or cohort table", "incomplete-period caveat"]
+  },
+  {
+    "id": "metric_diagnostics",
+    "name": "Metric Diagnostics",
+    "description": "Explain why a business metric moved by checking definition, baseline, segments, and contribution.",
+    "triggers": ["why", "driver", "impact", "increase", "decrease", "decline", "change", "原因", "为什么", "驱动", "影响", "上涨", "下降", "变化"],
+    "required_profile": ["candidate_measures", "candidate_dimensions", "date_ranges"],
+    "plan_rules": ["Confirm the metric definition and comparison baseline first.", "Rule out measurement artifacts before business explanations.", "Decompose movement by high-signal dimensions."],
+    "validation_rules": ["Contributions should reconcile to total movement when additive.", "Label observations, hypotheses, and unknowns separately.", "Do not claim causality from descriptive data."],
+    "output_contract": ["metric definition", "baseline comparison", "segment contributions", "confidence", "next checks"]
+  }
+]

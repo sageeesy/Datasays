@@ -1,0 +1,27 @@
+# Python Sandbox Dockerfile
+# Lightweight Python environment for code execution
+
+FROM python:3.11-slim
+
+# Install required Python packages for data analysis
+# Version numbers match server/requirements.txt for consistency
+RUN pip install --no-cache-dir \
+    pandas==2.2.1 \
+    numpy==1.26.4 \
+    scipy==1.11.4 \
+    scikit-learn==1.4.2
+
+# Create a non-root user for security
+RUN useradd -m -u 1000 sandbox && \
+    mkdir -p /sandbox && \
+    chown -R sandbox:sandbox /sandbox
+
+# Set working directory
+WORKDIR /sandbox
+
+# Switch to non-root user
+USER sandbox
+
+# Default command (will be overridden)
+CMD ["python3", "script.py"]
+

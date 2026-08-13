@@ -1,0 +1,25 @@
+# Environment variables
+.env
+.env.local
+
+# Uploaded files
+/uploads/
+
+# Local persistence and virtual environment
+/data/
+/venv/
+
+# Logs
+/logs/
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
