@@ -29,6 +29,7 @@ interface VerifiedAnswerMessageProps {
 
 const TRACE_LABELS: Record<string, { zh: string; en: string }> = {
   profile_data: { zh: "生成数据画像", en: "Profile data" },
+  load_memory: { zh: "加载对话记忆", en: "Load conversation memory" },
   select_skills: { zh: "选择分析 Skill", en: "Select analysis Skills" },
   retrieve_metrics: { zh: "检索指标定义", en: "Retrieve metric definitions" },
   plan_analysis: { zh: "制定分析计划", en: "Plan analysis" },
@@ -100,6 +101,12 @@ export function VerifiedAnswerMessage({ response, timestamp, onOpenDashboard }: 
       const names = skills.map((skill) => skill.name).join("、") || "通用分析 Skill";
       const terms = skills.flatMap((skill) => skill.matched_terms || []);
       return `选择 ${names}。${terms.length ? `问题命中了“${terms.join("、")}”等特征词。` : "未命中专用模式，因此使用通用分析规则。"}`;
+    }
+    if (step.node === "load_memory") {
+      const memory = metadata?.memory;
+      return memory?.used
+        ? `加载 ${memory.recent_message_count || 0} 条近期消息和 ${memory.verified_finding_count || 0} 条已验证结论；失败结果不会进入可信记忆。`
+        : "当前没有可复用的历史上下文，本轮按独立问题处理。";
     }
     if (step.node === "retrieve_metrics") {
       return metrics.length

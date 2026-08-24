@@ -113,7 +113,7 @@ async def not_found_handler(request, exc):
                 "health": "GET /health",
                 "root": "GET /",
                 "files": "POST /api/files/upload, GET /api/files/:fileId, DELETE /api/files/:fileId",
-                "query": "POST /api/query (returns one verified Agent result)",
+                "query": "POST /api/query or POST /api/query/stream (verified result with live Agent events)",
                 "conversations": "GET/POST /api/conversations"
             }
         }

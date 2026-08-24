@@ -1,4 +1,4 @@
-import { Send, Cog, CheckCircle, Circle, Loader2, Upload, Table2, Sparkles } from "lucide-react";
+import { Send, Cog, CheckCircle, AlertCircle, Loader2, Upload, Table2, Sparkles } from "lucide-react";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
 import { FileChip } from "./FileChip";
@@ -8,6 +8,7 @@ import { lazy, Suspense, useState, useRef, useEffect } from "react";
 import { DEFAULT_MODEL, MODEL_OPTIONS } from "../lib/modelOptions";
 import { useI18n } from "../lib/i18n";
 import type { ChatMessage, DashboardPayload } from "../lib/appTypes";
+import type { AgentProgressEvent } from "../lib/client";
 
 const ConversationalMessage = lazy(() =>
   import("./ConversationalMessage").then((module) => ({ default: module.ConversationalMessage }))
@@ -26,6 +27,7 @@ interface ConversationalChatAreaProps {
   onSendMessage: (message: string, fileIds: string[], model?: string, promptStyle?: string) => void;
   onOpenDashboard: (payload: DashboardPayload) => void;
   isLoading: boolean;
+  progressEvents: AgentProgressEvent[];
   activeFiles: FileInfo[];
   onUpload: () => void;
 }
@@ -35,6 +37,7 @@ export function ConversationalChatArea({
   onSendMessage,
   onOpenDashboard,
   isLoading,
+  progressEvents,
   activeFiles,
   onUpload,
 }: ConversationalChatAreaProps) {
@@ -78,15 +81,15 @@ export function ConversationalChatArea({
     }
   };
 
-  const renderRunningSteps = (steps: string[]) => {
-    const activeIndex = Math.min(
-      steps.length - 1,
-      Math.max(0, Math.floor(runningSeconds / 5))
-    );
-
+  const renderRunningProcess = () => {
+    const visibleEvents = progressEvents.filter((event) => event.node);
     return (
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-4 shadow-sm min-w-0">
-        <div className="flex items-center gap-2 mb-3 min-w-0">
+      <div
+        className="min-w-0 rounded-lg border border-gray-200 bg-white px-4 py-4 shadow-sm dark:border-gray-700 dark:bg-gray-800"
+        aria-live="polite"
+        aria-label={t("analysisProgress")}
+      >
+        <div className="mb-3 flex min-w-0 items-center gap-2">
           <div
             className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md bg-blue-600"
           >
@@ -100,40 +103,49 @@ export function ConversationalChatArea({
               {runningSeconds < 2 ? t("starting") : t("elapsed", { seconds: runningSeconds })}
             </div>
           </div>
-          <Loader2
-            className="h-4 w-4 flex-shrink-0 animate-spin text-blue-600"
-          />
+          <Loader2 className="h-4 w-4 flex-shrink-0 animate-spin text-blue-600" />
         </div>
 
-        <div className="space-y-2">
-          {steps.map((step, index) => {
-            const isDone = index < activeIndex;
-            const isActive = index === activeIndex;
+        <p className="mb-3 text-xs leading-5 text-gray-500 dark:text-gray-400">
+          {t("progressHint")}
+        </p>
+
+        <div className="space-y-1">
+          {visibleEvents.length === 0 && (
+            <div className="flex items-center gap-2 rounded-md bg-blue-50 px-2 py-2 dark:bg-blue-950/30">
+              <Loader2 className="h-4 w-4 flex-shrink-0 animate-spin text-blue-600" />
+              <span className="text-sm text-gray-700 dark:text-gray-200">{t("starting")}</span>
+            </div>
+          )}
+          {visibleEvents.map((event, index) => {
+            const title = language === "zh" ? event.title_zh : event.title_en;
+            const detail = language === "zh" ? event.detail_zh : event.detail_en;
+            const isActive = event.status === "running";
+            const isError = event.status === "error";
             return (
               <div
-                key={step}
-                className={`flex items-start gap-2 rounded-md px-2 py-2 transition-colors ${
+                key={event.id || `${event.node}-${index}`}
+                className={`flex min-w-0 items-start gap-2 rounded-md px-2 py-2 transition-colors ${
                   isActive ? "bg-blue-50 dark:bg-blue-950/30" : ""
                 }`}
               >
-                {isDone ? (
-                  <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
-                ) : isActive ? (
-                  <Loader2
-                    className="mt-0.5 h-4 w-4 flex-shrink-0 animate-spin text-blue-600"
-                  />
+                {isActive ? (
+                  <Loader2 className="mt-0.5 h-4 w-4 flex-shrink-0 animate-spin text-blue-600" />
+                ) : isError ? (
+                  <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-600" />
                 ) : (
-                  <Circle className="h-4 w-4 text-gray-300 dark:text-gray-600 mt-0.5 flex-shrink-0" />
+                  <CheckCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-emerald-600" />
                 )}
-                <span
-                  className={`text-sm leading-snug ${
-                    isDone || isActive
-                      ? "text-gray-800 dark:text-gray-100"
-                      : "text-gray-400 dark:text-gray-500"
-                  }`}
-                >
-                  {step}
-                </span>
+                <div className="min-w-0 flex-1">
+                  <div className={`text-sm font-medium leading-5 ${isError ? "text-red-700 dark:text-red-300" : "text-gray-800 dark:text-gray-100"}`}>
+                    {title || event.node}
+                  </div>
+                  {detail && (
+                    <div className="mt-0.5 break-words text-xs leading-5 text-gray-500 dark:text-gray-400">
+                      {detail}
+                    </div>
+                  )}
+                </div>
               </div>
             );
           })}
@@ -141,36 +153,6 @@ export function ConversationalChatArea({
       </div>
     );
   };
-
-  const renderRunningProcess = () => (
-    <div className="space-y-3">
-      <div className="rounded-lg border border-blue-100 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/20 px-4 py-3">
-        <div className="text-sm font-medium text-blue-900 dark:text-blue-100">
-          {t("analysisProgress")}
-        </div>
-        <div className="text-xs text-blue-700 dark:text-blue-300 mt-1">
-          {t("progressHint")}
-        </div>
-      </div>
-      {renderRunningSteps(language === "zh" ? [
-        "读取问题并检查数据画像",
-        "检索指标定义并选择分析技能",
-        "生成结构化分析计划",
-        "生成 Python 代码",
-        "在沙箱中执行代码",
-        "验证结果，必要时自动修复",
-        "整理可信答案与证据",
-      ] : [
-        "Reading the question and dataset profile",
-        "Retrieving metrics and selecting skills",
-        "Building a structured analysis plan",
-        "Generating Python code",
-        "Executing code in the sandbox",
-        "Validating and repairing if needed",
-        "Preparing the verified answer and evidence",
-      ])}
-    </div>
-  );
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {

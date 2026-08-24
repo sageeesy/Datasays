@@ -5,9 +5,74 @@ from typing import Any, Dict, List, Literal, Optional, Union
 from pydantic import BaseModel, Field, model_validator
 
 
+class PlanFilter(BaseModel):
+    dataset: str = Field(min_length=1)
+    column: str = Field(min_length=1)
+    operator: Literal[
+        "eq",
+        "ne",
+        "in",
+        "not_in",
+        "between",
+        "gte",
+        "lte",
+        "is_null",
+        "not_null",
+    ]
+    value: Any = None
+
+
+class MetricOperand(BaseModel):
+    description: str = Field(min_length=1)
+    aggregation: str = Field(min_length=1)
+    filters: List[PlanFilter] = Field(default_factory=list)
+
+
+class PlannedMetric(BaseModel):
+    key: str = Field(min_length=1, pattern=r"^[A-Za-z][A-Za-z0-9_]*$")
+    label: str = Field(min_length=1)
+    metric_id: Optional[str] = None
+    metric_type: Literal[
+        "count",
+        "sum",
+        "average",
+        "rate",
+        "share",
+        "ratio",
+        "difference",
+        "other",
+    ]
+    definition: str = Field(min_length=1)
+    calculation: str = Field(min_length=1)
+    numerator: Optional[MetricOperand] = None
+    denominator: Optional[MetricOperand] = None
+    filters: List[PlanFilter] = Field(default_factory=list)
+    value_scale: Literal["raw", "fraction", "percent"] = "raw"
+
+
+class JoinRequirement(BaseModel):
+    left_dataset: str = Field(min_length=1)
+    right_dataset: str = Field(min_length=1)
+    join_keys: List[str] = Field(min_length=1)
+    how: Literal["inner", "left", "right", "outer"]
+    left_grain: str = Field(min_length=1)
+    right_grain: str = Field(min_length=1)
+    relationship: Literal["one_to_one", "one_to_many", "many_to_one", "many_to_many"]
+    pre_join_aggregation: Optional[str] = None
+
+
+class MetricCandidateRejection(BaseModel):
+    metric_id: str = Field(min_length=1)
+    reason: str = Field(min_length=1)
+    superseded_by: Optional[str] = None
+
+
 class AnalysisPlan(BaseModel):
+    """Planner contract for business semantics; readiness is checked separately."""
+
     intent: Literal[
         "lookup",
+        "filtering",
         "aggregation",
         "ranking",
         "trend",
@@ -15,18 +80,38 @@ class AnalysisPlan(BaseModel):
         "data_quality",
         "metric_diagnostic",
         "modeling",
-        "other",
-    ] = "other"
+    ]
+    analysis_scope: Optional[str] = None
+    entity_grain: Optional[str] = None
     metric_ids: List[str] = Field(default_factory=list)
+    metrics: List[PlannedMetric] = Field(default_factory=list)
+    rejected_metrics: List[MetricCandidateRejection] = Field(default_factory=list)
     required_columns: List[str] = Field(default_factory=list)
     dimensions: List[str] = Field(default_factory=list)
-    filters: List[str] = Field(default_factory=list)
+    filters: List[PlanFilter] = Field(default_factory=list)
+    # Kept for compatibility with persisted metadata and older downstream readers.
+    # V1.5 puts calculation semantics on each PlannedMetric instead.
     aggregation: Optional[str] = None
-    time_grain: Optional[str] = None
+    time_field: Optional[str] = None
+    time_grain: Optional[Literal["day", "week", "month", "quarter", "year"]] = None
+    joins: List[JoinRequirement] = Field(default_factory=list)
     steps: List[str] = Field(default_factory=list)
     assumptions: List[str] = Field(default_factory=list)
     needs_clarification: bool = False
     clarification_question: Optional[str] = None
+
+
+class PlanCompletenessIssue(BaseModel):
+    code: str
+    field: str
+    message: str
+
+
+class PlanCompletenessReport(BaseModel):
+    schema_valid: bool = True
+    ready_for_code_generation: bool
+    valid_clarification: bool = False
+    issues: List[PlanCompletenessIssue] = Field(default_factory=list)
 
 
 ScalarValue = Union[float, int, str, bool]
@@ -176,6 +261,8 @@ class MetricDefinition(BaseModel):
     grain: str
     required_concepts: List[str] = Field(default_factory=list)
     time_concept: Optional[str] = None
+    default_population: Optional[str] = None
+    denominator_policy: Optional[str] = None
     default_filters: List[str] = Field(default_factory=list)
     allowed_dimensions: List[str] = Field(default_factory=list)
     caveats: List[str] = Field(default_factory=list)
@@ -187,8 +274,13 @@ class MetricMatch(BaseModel):
     metric: MetricDefinition
     score: float
     matched_terms: List[str] = Field(default_factory=list)
+    match_type: Literal["exact", "token_overlap"]
+    decision_required: bool = False
+    shadowed_by: Optional[str] = None
     field_bindings: Dict[str, List[Dict[str, str]]] = Field(default_factory=dict)
     missing_concepts: List[str] = Field(default_factory=list)
+    time_field_candidates: List[Dict[str, str]] = Field(default_factory=list)
+    knowledge_context: Dict[str, Any] = Field(default_factory=dict)
 
 
 class ValidationCheck(BaseModel):

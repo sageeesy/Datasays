@@ -12,12 +12,12 @@ import {
   deleteConversation as deletePersistedConversation,
   listConversations,
   listFiles,
-  sendQuery,
+  sendQueryStream,
   updateConversation,
   uploadFiles,
   FileInfo as APIFileInfo,
 } from "./lib/client";
-import type { PersistedConversation } from "./lib/client";
+import type { AgentProgressEvent, PersistedConversation } from "./lib/client";
 import type { AppPage, ChatMessage, DashboardPayload } from "./lib/appTypes";
 import { useI18n } from "./lib/i18n";
 
@@ -83,6 +83,7 @@ export default function App() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [agentProgressEvents, setAgentProgressEvents] = useState<AgentProgressEvent[]>([]);
   const [currentPage, setCurrentPage] = useState<AppPage>("analysis");
   const [dashboardPayload, setDashboardPayload] = useState<DashboardPayload | null>(null);
   const [isRestoring, setIsRestoring] = useState(true);
@@ -309,12 +310,13 @@ export default function App() {
         })
       );
       setIsLoading(true);
+      setAgentProgressEvents([]);
 
       try {
         if (nextTitle && nextTitle !== originalConversation?.title) {
           await updateConversation(currentConversationId, { title: nextTitle });
         }
-        const response = await sendQuery({
+        const response = await sendQueryStream({
           question: message,
           fileIds: fileIds,
           model,
@@ -322,6 +324,15 @@ export default function App() {
           mode: "agent",
           conversationId: currentConversationId,
           userMessageId: userMessage.id,
+        }, (event) => {
+          setAgentProgressEvents((previous) => {
+            if (!event.node) return previous;
+            const existingIndex = previous.findIndex((item) => item.id === event.id);
+            if (existingIndex < 0) return [...previous, event];
+            const next = [...previous];
+            next[existingIndex] = event;
+            return next;
+          });
         });
 
         console.log("FULL API RESPONSE:", response);
@@ -450,6 +461,7 @@ export default function App() {
               setCurrentPage("dashboard");
             }}
             isLoading={isLoading || isRestoring}
+            progressEvents={agentProgressEvents}
             activeFiles={activeFiles.map(f => ({ id: f.id, name: f.name }))}
             onUpload={handleOpenUploadModal}
           />

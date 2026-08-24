@@ -14,6 +14,7 @@ from app.services.conversation_service import (
     save_message,
     update_conversation,
 )
+from app.services.memory_service import build_conversation_context
 
 
 class ConversationServiceTest(unittest.TestCase):
@@ -109,6 +110,114 @@ class ConversationServiceTest(unittest.TestCase):
         self.assertTrue(delete_conversation(conversation["id"]))
         self.assertIsNone(get_conversation(conversation["id"]))
         self.assertFalse(delete_conversation(conversation["id"]))
+
+    def test_memory_uses_verified_runs_and_excludes_current_message(self) -> None:
+        conversation = create_conversation("Revenue follow-up", ["file-a"])
+        verified = save_analysis_exchange(
+            conversation_id=conversation["id"],
+            user_message_id="verified-user",
+            question="What is total revenue?",
+            file_names=["sales.csv"],
+            model="test-model",
+            prompt_style="zero",
+            response={
+                "success": True,
+                "llmResponse": {"content": "Revenue is 120.", "status": "success"},
+                "sandboxResponse": {
+                    "content": "Revenue is 120.",
+                    "status": "success",
+                    "metadata": {
+                        "dataset_profiles": [{"file_name": "sales.csv"}],
+                        "plan": {"intent": "aggregation", "filters": [], "dimensions": []},
+                        "validation_report": {"passed": True, "confidence": "high", "checks": []},
+                        "analysis_result": {
+                            "answer_type": "number",
+                            "primary_value": 120,
+                            "unit": "USD",
+                            "summary": "Total revenue is 120 USD.",
+                            "rows": [],
+                            "columns_used": ["revenue"],
+                            "metric_id": None,
+                            "assumptions": [],
+                            "insights": ["Revenue was calculated from all rows."],
+                        },
+                    },
+                },
+            },
+        )
+        save_analysis_exchange(
+            conversation_id=conversation["id"],
+            user_message_id="failed-user",
+            question="Run a broken calculation",
+            file_names=["sales.csv"],
+            model="test-model",
+            prompt_style="zero",
+            response={
+                "success": True,
+                "llmResponse": {"content": "Failed", "status": "error"},
+                "sandboxResponse": {"content": "Untrusted result 999", "status": "error"},
+            },
+        )
+        save_message(
+            conversation_id=conversation["id"],
+            role="user",
+            content="Break that down by channel",
+            message_id="current-user",
+            file_names=["sales.csv"],
+        )
+
+        context = build_conversation_context(
+            conversation_id=conversation["id"],
+            current_file_names=["sales.csv"],
+            exclude_message_id="current-user",
+        )
+
+        self.assertEqual(context["source_run_ids"], [verified["runId"]])
+        self.assertEqual(len(context["verified_findings"]), 1)
+        self.assertEqual(context["verified_findings"][0]["primary_value"], 120)
+        self.assertNotIn("Break that down by channel", str(context["recent_messages"]))
+        self.assertNotIn("Untrusted result 999", str(context))
+
+    def test_memory_does_not_reuse_findings_from_another_dataset(self) -> None:
+        conversation = create_conversation("Dataset scope")
+        save_analysis_exchange(
+            conversation_id=conversation["id"],
+            user_message_id="user-sales",
+            question="Summarize sales",
+            file_names=["sales.csv"],
+            model=None,
+            prompt_style="zero",
+            response={
+                "success": True,
+                "llmResponse": {"content": "Done", "status": "success"},
+                "sandboxResponse": {
+                    "content": "Done",
+                    "status": "success",
+                    "metadata": {
+                        "dataset_profiles": [{"file_name": "sales.csv"}],
+                        "plan": {},
+                        "validation_report": {"passed": True},
+                        "analysis_result": {
+                            "answer_type": "text",
+                            "summary": "Sales summary",
+                            "rows": [],
+                            "columns_used": [],
+                            "assumptions": [],
+                            "insights": [],
+                        },
+                    },
+                },
+            },
+        )
+
+        context = build_conversation_context(
+            conversation_id=conversation["id"],
+            current_file_names=["inventory.csv"],
+        )
+
+        self.assertEqual(context["verified_findings"], [])
+        self.assertEqual(context["source_run_ids"], [])
+        self.assertEqual(context["recent_messages"], [])
 
 
 if __name__ == "__main__":

@@ -16,6 +16,27 @@
     "source": "Google Analytics ecommerce metrics and common commerce reporting practice"
   },
   {
+    "id": "ecommerce.payment_gmv",
+    "domain": "ecommerce",
+    "name": "Payment Gross Merchandise Value",
+    "aliases": ["payment GMV", "paid GMV", "支付GMV", "实付GMV"],
+    "description": "Total paid amount associated with the eligible order population.",
+    "formula": "sum(paid_amount)",
+    "entity": "order",
+    "grain": "period",
+    "required_concepts": ["paid_amount", "order_id"],
+    "time_concept": "payment_time",
+    "default_population": "Valid paid orders in the analysis period.",
+    "denominator_policy": null,
+    "default_filters": ["Include valid paid orders only."],
+    "allowed_dimensions": ["payment_type", "channel", "region", "product_category"],
+    "caveats": [
+      "Aggregate multiple payment rows to the order grain before combining payment GMV with order-level metrics.",
+      "Payment GMV is not necessarily merchandise GMV, recognized revenue, or net sales."
+    ],
+    "source": "Common ecommerce payment reporting practice"
+  },
+  {
     "id": "ecommerce.net_sales",
     "domain": "ecommerce",
     "name": "Net Sales",
@@ -29,6 +50,22 @@
     "default_filters": ["Include paid orders only."],
     "allowed_dimensions": ["channel", "region", "product_category", "customer_type"],
     "caveats": ["Refund timing and partial refunds must be defined explicitly."],
+    "source": "Common commerce finance reporting practice"
+  },
+  {
+    "id": "ecommerce.gross_profit",
+    "domain": "ecommerce",
+    "name": "Gross Profit",
+    "aliases": ["gross profit", "profit", "profit margin", "毛利润", "毛利", "利润", "利润率"],
+    "description": "Revenue remaining after the explicitly defined cost of goods sold is deducted.",
+    "formula": "sum(item_revenue - cost_amount)",
+    "entity": "order_item",
+    "grain": "period",
+    "required_concepts": ["item_revenue", "cost_amount"],
+    "time_concept": "payment_time",
+    "default_filters": ["Use the agreed valid-order and recognized-revenue policy."],
+    "allowed_dimensions": ["channel", "region", "product_category", "seller"],
+    "caveats": ["Gross profit requires a cost field; revenue or price alone is not profit.", "Define whether shipping, discounts, tax, and refunds affect the selected margin."],
     "source": "Common commerce finance reporting practice"
   },
   {
@@ -74,10 +111,72 @@
     "grain": "period",
     "required_concepts": ["paid_amount", "order_id"],
     "time_concept": "payment_time",
+    "default_population": "Valid paid orders in the analysis period.",
+    "denominator_policy": "Use the distinct valid orders represented by the paid-amount numerator; do not count payment rows as orders.",
     "default_filters": ["Include valid paid orders only."],
     "allowed_dimensions": ["channel", "region", "product_category", "customer_type"],
     "caveats": ["Confirm gross versus net revenue and partial-refund handling."],
     "source": "Amplitude revenue metrics and common commerce reporting practice"
+  },
+  {
+    "id": "ecommerce.delivery_rate",
+    "domain": "ecommerce",
+    "name": "Delivery Rate",
+    "aliases": ["delivery rate", "delivered rate", "交付率", "妥投率"],
+    "description": "Share of eligible orders that reached the defined delivered or completed status.",
+    "formula": "delivered_orders / eligible_orders",
+    "entity": "order",
+    "grain": "period",
+    "required_concepts": ["order_id", "order_status"],
+    "time_concept": "order_time",
+    "default_population": "All eligible orders created in the analysis period.",
+    "denominator_policy": "Use all distinct eligible orders before applying the delivered-status numerator filter; preserve orders without payment or delivery-detail matches.",
+    "default_filters": [],
+    "allowed_dimensions": ["channel", "region", "product_category"],
+    "caveats": [
+      "The delivered-status set must be defined by the project or user.",
+      "Recent order cohorts may not have had enough time to reach delivery."
+    ],
+    "source": "Common ecommerce fulfillment reporting practice"
+  },
+  {
+    "id": "ecommerce.payment_method_amount_share",
+    "domain": "ecommerce",
+    "name": "Payment Method Amount Share",
+    "aliases": ["payment method share", "payment amount share", "支付方式金额占比", "支付金额占比", "金额占比"],
+    "description": "Share of eligible paid amount contributed by a selected payment method.",
+    "formula": "sum(paid_amount where payment_type = selected_type) / sum(paid_amount)",
+    "entity": "payment",
+    "grain": "period",
+    "required_concepts": ["paid_amount", "payment_type", "order_id"],
+    "time_concept": "payment_time",
+    "default_population": "All eligible payment rows associated with valid paid orders.",
+    "denominator_policy": "Use paid amount across all payment methods in the same eligible population; apply the payment-type filter only to the numerator.",
+    "default_filters": ["Include payment rows associated with valid paid orders."],
+    "allowed_dimensions": ["payment_type", "channel", "region"],
+    "caveats": ["Do not describe payment amount share as order share or customer share."],
+    "source": "Common ecommerce payment-mix reporting practice"
+  },
+  {
+    "id": "ecommerce.multi_payment_order_rate",
+    "domain": "ecommerce",
+    "name": "Multi-payment Order Rate",
+    "aliases": ["multi-payment rate", "multiple payment order rate", "多次支付订单占比", "多笔支付订单占比", "多次支付占比"],
+    "description": "Share of eligible orders with more than one payment record.",
+    "formula": "orders_with_more_than_one_payment_row / orders_with_payment_rows",
+    "entity": "order",
+    "grain": "period",
+    "required_concepts": ["order_id", "payment_sequence"],
+    "time_concept": "payment_time",
+    "default_population": "Valid orders with at least one payment row.",
+    "denominator_policy": "Use distinct eligible order_id values with payment rows; first count payment rows by order_id, then filter the numerator to orders with more than one row.",
+    "default_filters": ["Include payment rows associated with valid paid orders."],
+    "allowed_dimensions": ["payment_type", "channel", "region"],
+    "caveats": [
+      "Multiple payment rows may represent split methods or installments; confirm the dataset meaning before interpreting customer behavior.",
+      "Do not divide payment-row counts by payment-row counts when reporting an order rate."
+    ],
+    "source": "Common ecommerce payment-operations reporting practice"
   },
   {
     "id": "ecommerce.purchase_conversion_rate",

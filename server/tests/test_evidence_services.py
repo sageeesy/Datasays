@@ -5,6 +5,7 @@ from pathlib import Path
 
 from app.schemas.analysis import AnalysisPlan, AnalysisResult
 from app.services.agent_service import _is_non_repairable_execution_error, _workflow_metadata
+from app.services.plan_service import _apply_planning_guards
 from app.services.code_service import _build_code_generation_prompt, _extract_code_and_reasoning, _message_text, contains_image_generation
 from app.services.metric_service import compact_metric_match, retrieve_metric_definitions
 from app.services.profile_service import build_dataset_profile
@@ -14,6 +15,46 @@ from app.services.validation_service import render_validation_failure, validate_
 
 
 class EvidenceServicesTest(unittest.TestCase):
+    def test_planning_guard_clarifies_missing_metric_evidence(self) -> None:
+        plan, metadata = _apply_planning_guards(
+            AnalysisPlan(intent="ranking", needs_clarification=False),
+            "哪个品类利润最高？",
+            [{"columns": [{"name": "payment_value"}, {"name": "product_category"}]}],
+            [{
+                "id": "ecommerce.gross_profit",
+                "name": "Gross Profit",
+                "matched_terms": ["利润"],
+                "missing_concepts": ["cost_amount"],
+            }],
+        )
+
+        self.assertTrue(plan.needs_clarification)
+        self.assertIn("cost_amount", plan.clarification_question)
+        self.assertTrue(metadata["applied"])
+
+    def test_planning_guard_clarifies_an_absent_requested_dimension(self) -> None:
+        plan, metadata = _apply_planning_guards(
+            AnalysisPlan(intent="ranking"),
+            "哪个获客渠道的新客质量最好？",
+            [{"columns": [{"name": "customer_unique_id"}, {"name": "order_id"}]}],
+            [],
+        )
+
+        self.assertTrue(plan.needs_clarification)
+        self.assertIn("channel", plan.clarification_question)
+        self.assertTrue(metadata["applied"])
+
+    def test_planning_guard_does_not_block_an_available_dimension(self) -> None:
+        plan, metadata = _apply_planning_guards(
+            AnalysisPlan(intent="ranking"),
+            "按 channel 比较订单量",
+            [{"columns": [{"name": "channel"}, {"name": "order_id"}]}],
+            [],
+        )
+
+        self.assertFalse(plan.needs_clarification)
+        self.assertFalse(metadata["applied"])
+
     def test_code_extraction_handles_provider_response_shapes(self) -> None:
         fenced = _extract_code_and_reasoning(
             "Short summary.\r\n```Python\r\nimport json\nprint('ok')\r\n```"
@@ -181,6 +222,10 @@ class EvidenceServicesTest(unittest.TestCase):
             "status": "error",
             "content": "Sandbox configuration error: Docker not found.",
         }))
+        self.assertTrue(_is_non_repairable_execution_error({
+            "status": "error",
+            "content": "ModuleNotFoundError: No module named 'pandas'",
+        }))
         self.assertFalse(_is_non_repairable_execution_error({
             "status": "error",
             "content": "Execution error: KeyError: Sales",
@@ -221,6 +266,112 @@ class EvidenceServicesTest(unittest.TestCase):
         self.assertFalse(compact["missing_concepts"])
         self.assertEqual(compact["field_bindings"]["order_id"][0]["column"], "order_id")
         self.assertEqual(compact["field_bindings"]["paid_amount"][0]["column"], "paid_amount")
+        self.assertEqual(compact["time_concept"], "payment_time")
+        self.assertEqual(compact["time_binding_status"], "unresolved")
+        self.assertEqual(compact["time_field_candidates"], [])
+
+    def test_olist_project_override_is_explicit_and_binds_business_time(self) -> None:
+        profiles = [{
+            "file_name": "orders.csv",
+            "columns": [
+                {"name": "order_id"},
+                {"name": "order_status"},
+                {"name": "order_purchase_timestamp"},
+            ],
+        }, {
+            "file_name": "payments.csv",
+            "columns": [{"name": "order_id"}, {"name": "payment_value"}],
+        }]
+
+        domain_match = compact_metric_match(
+            retrieve_metric_definitions("What is the AOV?", profiles)[0]
+        )
+        olist_match = compact_metric_match(
+            retrieve_metric_definitions("What is the AOV?", profiles, project_id="olist")[0]
+        )
+
+        self.assertIsNone(domain_match["knowledge_context"]["project_id"])
+        self.assertEqual(domain_match["time_concept"], "payment_time")
+        self.assertEqual(domain_match["default_population"], "Valid paid orders in the analysis period.")
+        self.assertEqual(olist_match["knowledge_context"]["project_id"], "olist")
+        self.assertEqual(olist_match["domain_time_concept"], "payment_time")
+        self.assertEqual(olist_match["time_concept"], "order_time")
+        self.assertEqual(olist_match["time_binding_status"], "resolved")
+        self.assertEqual(
+            olist_match["time_field_candidates"][0]["column"],
+            "order_purchase_timestamp",
+        )
+        self.assertEqual(
+            olist_match["field_bindings"]["paid_amount"][0]["binding_source"],
+            "project_override",
+        )
+        self.assertIn("valid_completed_order", olist_match["default_population"])
+
+    def test_payment_structure_retrieves_amount_and_order_grain_metrics(self) -> None:
+        profiles = [{
+            "file_name": "orders.csv",
+            "columns": [
+                {"name": "order_id"},
+                {"name": "order_status"},
+                {"name": "order_purchase_timestamp"},
+            ],
+        }, {
+            "file_name": "payments.csv",
+            "columns": [
+                {"name": "order_id"},
+                {"name": "payment_value"},
+                {"name": "payment_type"},
+                {"name": "payment_sequential"},
+            ],
+        }]
+        matches = retrieve_metric_definitions(
+            "比较支付方式金额占比，并计算多次支付订单占比",
+            profiles,
+            project_id="olist",
+        )
+        by_id = {match.metric.id: compact_metric_match(match) for match in matches}
+
+        self.assertIn("ecommerce.payment_method_amount_share", by_id)
+        self.assertIn("ecommerce.multi_payment_order_rate", by_id)
+        self.assertEqual(by_id["ecommerce.payment_method_amount_share"]["entity"], "payment")
+        self.assertEqual(by_id["ecommerce.multi_payment_order_rate"]["entity"], "order")
+        self.assertEqual(
+            by_id["ecommerce.multi_payment_order_rate"]["time_field_candidates"][0]["column"],
+            "order_purchase_timestamp",
+        )
+
+    def test_more_specific_payment_gmv_shadows_nested_gmv_alias(self) -> None:
+        profiles = [{
+            "file_name": "orders.csv",
+            "columns": [{"name": "order_id"}, {"name": "payment_value"}],
+        }]
+        matches = retrieve_metric_definitions("计算支付GMV", profiles)
+        by_id = {match.metric.id: compact_metric_match(match) for match in matches}
+
+        self.assertEqual(by_id["ecommerce.payment_gmv"]["match_type"], "exact")
+        self.assertTrue(by_id["ecommerce.payment_gmv"]["decision_required"])
+        self.assertIsNone(by_id["ecommerce.payment_gmv"]["shadowed_by"])
+        self.assertEqual(by_id["ecommerce.gmv"]["match_type"], "exact")
+        self.assertFalse(by_id["ecommerce.gmv"]["decision_required"])
+        self.assertEqual(
+            by_id["ecommerce.gmv"]["shadowed_by"],
+            "ecommerce.payment_gmv",
+        )
+
+    def test_token_overlap_candidate_is_not_a_required_decision(self) -> None:
+        profiles = [{
+            "file_name": "orders.csv",
+            "columns": [
+                {"name": "order_id"},
+                {"name": "payment_value"},
+                {"name": "order_purchase_timestamp"},
+            ],
+        }]
+        matches = retrieve_metric_definitions("Show monthly GMV and AOV", profiles)
+        by_id = {match.metric.id: compact_metric_match(match) for match in matches}
+
+        self.assertEqual(by_id["ecommerce.payment_gmv"]["match_type"], "token_overlap")
+        self.assertFalse(by_id["ecommerce.payment_gmv"]["decision_required"])
 
     def test_skill_selection_is_question_driven(self) -> None:
         skills = select_analysis_skills("Which region has the highest sales and what is the top 3?")
@@ -228,27 +379,29 @@ class EvidenceServicesTest(unittest.TestCase):
 
     def test_workflow_metadata_exposes_skill_selection_reason(self) -> None:
         matched_skills = select_analysis_skills("按 Outcome 分组比较各数值特征的平均值")
-        matched_metadata = _workflow_metadata(
-            steps=[],
-            profiles=[],
-            skills=matched_skills,
-            metric_matches=[],
-            plan=AnalysisPlan(intent="aggregation"),
-            planner_metadata={},
-            execution_attempts=[],
-            max_repair_attempts=1,
-        )
+        matched_metadata = _workflow_metadata({
+            "graph_thread_id": "test-matched",
+            "steps": [],
+            "profiles": [],
+            "selected_skills": matched_skills,
+            "metric_matches": [],
+            "plan": AnalysisPlan(intent="aggregation").model_dump(mode="json"),
+            "planner_metadata": {},
+            "execution_attempts": [],
+            "max_repair_attempts": 1,
+        })
         fallback_skills = select_analysis_skills("请帮我看看这个数据")
-        fallback_metadata = _workflow_metadata(
-            steps=[],
-            profiles=[],
-            skills=fallback_skills,
-            metric_matches=[],
-            plan=AnalysisPlan(intent="other"),
-            planner_metadata={},
-            execution_attempts=[],
-            max_repair_attempts=1,
-        )
+        fallback_metadata = _workflow_metadata({
+            "graph_thread_id": "test-fallback",
+            "steps": [],
+            "profiles": [],
+            "selected_skills": fallback_skills,
+            "metric_matches": [],
+            "plan": AnalysisPlan(intent="filtering").model_dump(mode="json"),
+            "planner_metadata": {},
+            "execution_attempts": [],
+            "max_repair_attempts": 1,
+        })
 
         selected = matched_metadata["selected_skills"][0]
         self.assertEqual(selected["name"], "Aggregation and Ranking")

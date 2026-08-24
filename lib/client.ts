@@ -128,6 +128,12 @@ export interface ResponseData {
     repair_attempts?: number;
     max_repair_attempts?: number;
     execution_attempts?: any[];
+    memory?: {
+      used: boolean;
+      recent_message_count: number;
+      verified_finding_count: number;
+      source_run_ids: string[];
+    };
     [key: string]: any;
   };
 }
@@ -136,6 +142,19 @@ export interface QueryResponse {
   success: boolean;
   llmResponse: ResponseData;
   sandboxResponse: ResponseData;
+}
+
+export interface AgentProgressEvent {
+  id?: string;
+  type?: 'run_started';
+  graph_thread_id?: string;
+  node?: string;
+  status: 'running' | 'completed' | 'error';
+  title_zh?: string;
+  title_en?: string;
+  detail_zh?: string;
+  detail_en?: string;
+  timestamp: number;
 }
 
 export interface PersistedChatMessage {
@@ -390,6 +409,83 @@ export async function sendQuery(request: QueryRequest): Promise<QueryResponse> {
       throw new Error('Request timeout: The query took more than 5 minutes. Please try a faster model, a simpler question, or a smaller dataset.');
     }
     throw error;
+  }
+}
+
+/**
+ * Send a query through the SSE endpoint and surface real LangGraph node events.
+ */
+export async function sendQueryStream(
+  request: QueryRequest,
+  onProgress: (event: AgentProgressEvent) => void,
+): Promise<QueryResponse> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), 300000);
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/query/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'text/event-stream',
+      },
+      body: JSON.stringify(request),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Failed to start analysis stream' }));
+      throw new Error(error.detail || error.error || error.message || `Failed to start analysis (${response.status})`);
+    }
+    if (!response.body) {
+      throw new Error('The browser did not expose the analysis response stream.');
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let finalResponse: QueryResponse | null = null;
+
+    const processBlock = (block: string) => {
+      let eventName = 'message';
+      const dataLines: string[] = [];
+      for (const line of block.split(/\r?\n/)) {
+        if (line.startsWith('event:')) eventName = line.slice(6).trim();
+        if (line.startsWith('data:')) dataLines.push(line.slice(5).trimStart());
+      }
+      if (dataLines.length === 0) return;
+      const payload = JSON.parse(dataLines.join('\n'));
+      if (eventName === 'progress') {
+        onProgress(payload as AgentProgressEvent);
+      } else if (eventName === 'result') {
+        finalResponse = payload as QueryResponse;
+      } else if (eventName === 'error') {
+        throw new Error(payload.message || 'The analysis workflow failed.');
+      }
+    };
+
+    while (true) {
+      const { value, done } = await reader.read();
+      buffer += decoder.decode(value, { stream: !done });
+      const blocks = buffer.split(/\r?\n\r?\n/);
+      buffer = blocks.pop() || '';
+      for (const block of blocks) {
+        if (block.trim()) processBlock(block);
+      }
+      if (done) break;
+    }
+    if (buffer.trim()) processBlock(buffer);
+    if (!finalResponse) {
+      throw new Error('The analysis stream ended before returning a verified result.');
+    }
+    return finalResponse;
+  } catch (error: any) {
+    if (error.name === 'AbortError') {
+      throw new Error('分析超过 5 分钟，已停止等待。请尝试更快的模型、更简单的问题或更小的数据集。');
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
   }
 }
 

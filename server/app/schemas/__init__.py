@@ -3,6 +3,7 @@
 from app.schemas.analysis import (
     AnalysisPlan,
     AnalysisResult,
+    MetricCandidateRejection,
     MetricDefinition,
     MetricMatch,
     ValidationCheck,
@@ -14,6 +15,7 @@ from app.schemas.analysis import (
 __all__ = [
     "AnalysisPlan",
     "AnalysisResult",
+    "MetricCandidateRejection",
     "MetricDefinition",
     "MetricMatch",
     "ValidationCheck",
