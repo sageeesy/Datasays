@@ -6,6 +6,7 @@ import os
 import re
 import json
 import subprocess
+import sys
 import tempfile
 import shutil
 from pathlib import Path
@@ -227,7 +228,7 @@ async def _execute_in_docker(temp_dir: Path) -> Dict[str, Any]:
 
 async def _execute_directly(temp_dir: Path) -> Dict[str, Any]:
     """Execute code directly (fallback for development)"""
-    python_path = os.getenv("PYTHON_PATH", "python3")
+    python_path = os.getenv("PYTHON_PATH", sys.executable)
     code_path = temp_dir / "script.py"
     
     process = await asyncio.create_subprocess_exec(

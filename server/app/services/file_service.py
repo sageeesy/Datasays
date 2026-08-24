@@ -7,7 +7,7 @@ import json
 import csv
 import uuid
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime
 
 from app.services.profile_service import build_dataset_profile
@@ -20,27 +20,25 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 METADATA_DIR.mkdir(parents=True, exist_ok=True)
 
 
-async def parse_csv(file_path: str) -> List[List[str]]:
-    """Parse CSV file and return rows"""
-    rows = []
-    with open(file_path, "r", encoding="utf-8") as f:
-        reader = csv.reader(f)
+def inspect_csv(file_path: str) -> Tuple[List[str], int, List[List[str]]]:
+    """Read CSV headers, row count, and a short preview without retaining all rows."""
+    with open(file_path, "r", encoding="utf-8-sig", newline="") as file:
+        reader = csv.reader(file)
+        headers = next(reader, [])
+        preview: List[List[str]] = [headers] if headers else []
+        row_count = 0
         for row in reader:
-            rows.append(row)
-    return rows
+            row_count += 1
+            if len(preview) < 4:
+                preview.append(row)
+    return headers, row_count, preview
 
 
 async def extract_metadata(file_path: str, original_name: str, file_name: str) -> Dict[str, Any]:
     """Extract metadata from CSV file"""
     file_stat = os.stat(file_path)
-    rows = await parse_csv(file_path)
-    
-    headers = rows[0] if rows else []
-    num_rows = len(rows) - 1  # Exclude header
+    headers, num_rows, preview = inspect_csv(file_path)
     num_columns = len(headers)
-    
-    # Get preview (first 4 rows including header)
-    preview = rows[:4] if len(rows) > 4 else rows
     profile = build_dataset_profile(file_path, original_name)
     
     return {

@@ -11,9 +11,30 @@ if [ ! -f .env ]; then
     exit 1
 fi
 
-PYTHON_BIN="python3"
-if [ -x "venv/bin/python" ] && venv/bin/python -c "import fastapi, uvicorn" >/dev/null 2>&1; then
-    PYTHON_BIN="venv/bin/python"
+PYTHON_BIN=""
+PYTHON_CANDIDATES=(
+    "${DATASAYS_PYTHON:-}"
+    "venv/bin/python"
+    "$(command -v python3 2>/dev/null || true)"
+    "/opt/anaconda3/envs/datasays/bin/python"
+    "$HOME/anaconda3/envs/datasays/bin/python"
+    "$HOME/miniconda3/envs/datasays/bin/python"
+)
+
+for candidate in "${PYTHON_CANDIDATES[@]}"; do
+    if [ -n "$candidate" ] && [ -x "$candidate" ] && "$candidate" -c "import fastapi, uvicorn" >/dev/null 2>&1; then
+        PYTHON_BIN="$candidate"
+        break
+    fi
+done
+
+if [ -z "$PYTHON_BIN" ]; then
+    PYTHON_BIN="$(command -v python3 2>/dev/null || true)"
+fi
+
+if [ -z "$PYTHON_BIN" ]; then
+    echo "Python 3 was not found. Install Python 3.11+ and run this script again."
+    exit 1
 fi
 
 if ! "$PYTHON_BIN" -c "import fastapi, uvicorn" >/dev/null 2>&1; then

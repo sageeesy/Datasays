@@ -31,9 +31,11 @@ server/uploads/*
 !server/uploads/.gitkeep
 server/data/
 server/venv/
+server/evals/results/
 
 # Python
 __pycache__/
+.ipynb_checkpoints/
 .pytest_cache/
 .coverage
 htmlcov/
@@ -53,8 +55,10 @@ build/
 .vscode/*
 !.vscode/extensions.json
 .idea
+.virtual_documents/
 .DS_Store
 **/.DS_Store
+Thumbs.db
 *.suo
 *.ntvs*
 *.njsproj
