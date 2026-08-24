@@ -1,0 +1,1506 @@
+{
+  "benchmark_name": "datasays_olist_business_analysis_v2",
+  "version": "2.1.0",
+  "description": "A 24-case capability benchmark for metric execution, data-grain safety, diagnosis, decision support, clarification, and multi-turn memory.",
+  "description_zh": "面向指标计算、数据粒度、经营诊断、决策支持、澄清边界和多轮记忆的24题能力评测。",
+  "source": {
+    "name": "Brazilian E-Commerce Public Dataset by Olist",
+    "url": "https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce",
+    "license": "CC BY-NC-SA 4.0",
+    "prepared_scope": "Deterministic customer-level sample of 15,000 orders purchased during calendar year 2017",
+    "prepared_scope_zh": "2017 自然年内下单的 15,000 笔客户级确定性抽样订单及关联记录",
+    "sampling": {
+      "target_orders": 15000,
+      "actual_orders": 15000,
+      "unit": "customer_unique_id",
+      "method": "sha256_ranked_customer_sample",
+      "relationship_policy": "keep_all_selected_customer_orders_and_filter_child_tables_by_foreign_key"
+    }
+  },
+  "datasets": {
+    "olist_orders_2017": {
+      "path": "data/olist/olist_orders_2017.csv",
+      "grain": "one row per order"
+    },
+    "olist_order_items_2017": {
+      "path": "data/olist/olist_order_items_2017.csv",
+      "grain": "one row per order item"
+    },
+    "olist_order_payments_2017": {
+      "path": "data/olist/olist_order_payments_2017.csv",
+      "grain": "one row per payment sequence"
+    },
+    "olist_order_reviews_2017": {
+      "path": "data/olist/olist_order_reviews_2017.csv",
+      "grain": "one row per review record"
+    },
+    "olist_products_2017": {
+      "path": "data/olist/olist_products_2017.csv",
+      "grain": "one row per product"
+    }
+  },
+  "defaults": {
+    "prompt_style": "zero",
+    "fact_tolerance": 0.001
+  },
+  "capability_dimensions": [
+    "metric_execution",
+    "data_quality_grain",
+    "business_diagnosis",
+    "decision_support",
+    "clarification_boundary",
+    "multi_turn_memory"
+  ],
+  "cases": [
+    {
+      "id": "executive_business_snapshot",
+      "category": "metric_execution",
+      "difficulty": "hard",
+      "language": "zh",
+      "datasets": [
+        "olist_orders_2017",
+        "olist_order_payments_2017"
+      ],
+      "question": "请给管理层做一页2017年经营概览：说明已交付订单规模、支付GMV、AOV和交付率，并用月度趋势图展示经营变化。明确你的指标口径和数据限制。",
+      "user_need": "管理层快速判断业务规模和趋势",
+      "capability": "多指标经营概览与可视化",
+      "expected": {
+        "facts": [
+          {
+            "id": "delivered_orders",
+            "value": 14429,
+            "tolerance": 0,
+            "terms": [
+              "订单"
+            ]
+          },
+          {
+            "id": "gmv",
+            "value": 2320454.3899999997,
+            "tolerance": 0.01,
+            "terms": [
+              "GMV"
+            ]
+          },
+          {
+            "id": "aov",
+            "value": 160.818794788274,
+            "tolerance": 0.01,
+            "terms": [
+              "AOV",
+              "客单价"
+            ]
+          },
+          {
+            "id": "delivered_rate",
+            "value": 0.961933333333,
+            "tolerance": 0.0001,
+            "terms": [
+              "交付率",
+              "妥投率"
+            ]
+          }
+        ],
+        "required_term_groups": [
+          [
+            "口径",
+            "定义"
+          ],
+          [
+            "限制",
+            "仅包含",
+            "2017"
+          ]
+        ],
+        "metric_ids": [
+          "ecommerce.order_count",
+          "ecommerce.gmv",
+          "ecommerce.aov"
+        ],
+        "visualization_types": [
+          "line"
+        ],
+        "plan_intents": [
+          "metric_diagnostic",
+          "trend"
+        ],
+        "clarification": false,
+        "clarification_terms": [],
+        "memory_used": null,
+        "min_fact_recall": 1.0,
+        "min_term_coverage": 0.5
+      }
+    },
+    {
+      "id": "monthly_peak_diagnosis",
+      "category": "metric_execution",
+      "difficulty": "hard",
+      "language": "zh",
+      "datasets": [
+        "olist_orders_2017",
+        "olist_order_payments_2017"
+      ],
+      "question": "2017年已交付业务在哪个月达到峰值？请同时检查月度GMV、订单量和AOV，判断峰值更可能由哪个指标驱动，并返回支持判断的月度趋势。",
+      "user_need": "理解经营峰值由规模还是价格驱动",
+      "capability": "时间趋势与驱动拆解",
+      "expected": {
+        "facts": [
+          {
+            "id": "peak_month",
+            "value": "2017-11"
+          },
+          {
+            "id": "peak_month_gmv",
+            "value": 394759.23,
+            "tolerance": 0.01
+          },
+          {
+            "id": "peak_month_orders",
+            "value": 2435,
+            "tolerance": 0
+          }
+        ],
+        "required_term_groups": [
+          [
+            "订单量",
+            "订单数"
+          ],
+          [
+            "AOV",
+            "客单价"
+          ],
+          [
+            "驱动",
+            "贡献"
+          ]
+        ],
+        "metric_ids": [],
+        "visualization_types": [
+          "line"
+        ],
+        "plan_intents": [
+          "trend"
+        ],
+        "clarification": false,
+        "clarification_terms": [],
+        "memory_used": null,
+        "min_fact_recall": 1.0,
+        "min_term_coverage": 0.67
+      }
+    },
+    {
+      "id": "state_revenue_concentration",
+      "category": "metric_execution",
+      "difficulty": "hard",
+      "language": "zh",
+      "datasets": [
+        "olist_orders_2017",
+        "olist_order_payments_2017"
+      ],
+      "question": "经营收入是否过度集中在少数州？请计算已交付订单的州级支付GMV，给出第一名州、其GMV占比以及前三州合计占比，并提供州级排名图。",
+      "user_need": "识别地区收入集中风险",
+      "capability": "分组排名与集中度",
+      "expected": {
+        "facts": [
+          {
+            "id": "top_state",
+            "value": "SP"
+          },
+          {
+            "id": "top_state_gmv",
+            "value": 809172.93,
+            "tolerance": 0.01
+          },
+          {
+            "id": "top_state_share",
+            "value": 0.348713137171,
+            "tolerance": 0.0001
+          },
+          {
+            "id": "top3_state_share",
+            "value": 0.612336991463,
+            "tolerance": 0.0001
+          }
+        ],
+        "required_term_groups": [
+          [
+            "集中",
+            "占比"
+          ],
+          [
+            "前三",
+            "Top 3",
+            "top3"
+          ]
+        ],
+        "metric_ids": [
+          "ecommerce.gmv"
+        ],
+        "visualization_types": [
+          "bar"
+        ],
+        "plan_intents": [
+          "ranking"
+        ],
+        "clarification": false,
+        "clarification_terms": [],
+        "memory_used": null,
+        "min_fact_recall": 1.0,
+        "min_term_coverage": 0.5
+      }
+    },
+    {
+      "id": "category_revenue_concentration",
+      "category": "metric_execution",
+      "difficulty": "hard",
+      "language": "zh",
+      "datasets": [
+        "olist_orders_2017",
+        "olist_order_items_2017",
+        "olist_products_2017"
+      ],
+      "question": "哪些商品品类构成收入基本盘？按已交付商品price计算品类收入，给出第一品类、第一品类占比和前五品类合计占比，并展示品类排名。不要把运费算作商品收入。",
+      "user_need": "识别核心品类与集中风险",
+      "capability": "多表品类排名",
+      "expected": {
+        "facts": [
+          {
+            "id": "top_category",
+            "value": "bed_bath_table"
+          },
+          {
+            "id": "top_category_revenue",
+            "value": 169784.27,
+            "tolerance": 0.01
+          },
+          {
+            "id": "top_category_share",
+            "value": 0.08495845782,
+            "tolerance": 0.0001
+          },
+          {
+            "id": "top5_category_share",
+            "value": 0.390032869159,
+            "tolerance": 0.0001
+          }
+        ],
+        "required_term_groups": [
+          [
+            "price",
+            "商品收入"
+          ],
+          [
+            "运费",
+            "freight"
+          ],
+          [
+            "前五",
+            "Top 5",
+            "top5"
+          ]
+        ],
+        "metric_ids": [],
+        "visualization_types": [
+          "bar"
+        ],
+        "plan_intents": [
+          "ranking"
+        ],
+        "clarification": false,
+        "clarification_terms": [],
+        "memory_used": null,
+        "min_fact_recall": 1.0,
+        "min_term_coverage": 0.67
+      }
+    },
+    {
+      "id": "repeat_customer_health",
+      "category": "metric_execution",
+      "difficulty": "hard",
+      "language": "zh",
+      "datasets": [
+        "olist_orders_2017"
+      ],
+      "question": "请评估2017年已交付客户的复购健康度。说明应使用哪个客户标识，计算至少下单两次的客户数量和复购客户占比，并解释这一结果不能代表完整生命周期复购率的原因。",
+      "user_need": "判断客户留存和复购基础",
+      "capability": "客户身份与观察窗口",
+      "expected": {
+        "facts": [
+          {
+            "id": "repeat_buyer_count",
+            "value": 403,
+            "tolerance": 0
+          },
+          {
+            "id": "repeat_buyer_rate",
+            "value": 0.028820710863,
+            "tolerance": 0.0001
+          }
+        ],
+        "required_term_groups": [
+          [
+            "customer_unique_id"
+          ],
+          [
+            "customer_id"
+          ],
+          [
+            "完整生命周期",
+            "仅2017",
+            "观察窗口"
+          ]
+        ],
+        "metric_ids": [
+          "ecommerce.repeat_purchase_rate"
+        ],
+        "visualization_types": [],
+        "plan_intents": [
+          "cohort",
+          "metric_diagnostic"
+        ],
+        "clarification": false,
+        "clarification_terms": [],
+        "memory_used": null,
+        "min_fact_recall": 1.0,
+        "min_term_coverage": 0.67
+      }
+    },
+    {
+      "id": "payment_structure_risk",
+      "category": "metric_execution",
+      "difficulty": "hard",
+      "language": "zh",
+      "datasets": [
+        "olist_orders_2017",
+        "olist_order_payments_2017"
+      ],
+      "question": "请分析已交付订单的支付结构：比较信用卡和boleto的支付金额占比，并计算多次支付订单占比。说明这些结果反映的是支付结构，不要把金额占比和订单占比混为一谈。",
+      "user_need": "理解支付渠道结构和复杂支付比例",
+      "capability": "不同分母的指标计算",
+      "expected": {
+        "facts": [
+          {
+            "id": "credit_card_share",
+            "value": 0.779164769535,
+            "tolerance": 0.0001
+          },
+          {
+            "id": "boleto_share",
+            "value": 0.192110882214,
+            "tolerance": 0.0001
+          },
+          {
+            "id": "multi_payment_rate",
+            "value": 0.034513826322,
+            "tolerance": 0.0001
+          }
+        ],
+        "required_term_groups": [
+          [
+            "金额占比"
+          ],
+          [
+            "订单占比",
+            "多次支付"
+          ]
+        ],
+        "metric_ids": [],
+        "visualization_types": [],
+        "plan_intents": [
+          "aggregation",
+          "metric_diagnostic"
+        ],
+        "clarification": false,
+        "clarification_terms": [],
+        "memory_used": null,
+        "min_fact_recall": 1.0,
+        "min_term_coverage": 0.5
+      }
+    },
+    {
+      "id": "fact_table_join_audit",
+      "category": "data_quality_grain",
+      "difficulty": "hard",
+      "language": "zh",
+      "datasets": [
+        "olist_orders_2017",
+        "olist_order_items_2017",
+        "olist_order_payments_2017"
+      ],
+      "question": "财务同事担心商品明细和支付明细直接关联会把金额放大。请自行审计两张事实表的粒度，量化直接Join造成的支付金额膨胀和商品收入膨胀，并核对正确支付总额与商品加运费总额的差异比例。给出安全Join建议。",
+      "user_need": "避免经营金额因错误Join失真",
+      "capability": "事实表粒度审计",
+      "expected": {
+        "facts": [
+          {
+            "id": "payment_join_inflation",
+            "value": 0.27657167181,
+            "tolerance": 0.0001
+          },
+          {
+            "id": "item_join_inflation",
+            "value": 0.056707728889,
+            "tolerance": 0.0001
+          },
+          {
+            "id": "reconciliation_gap_rate",
+            "value": 0.000206300112,
+            "tolerance": 1e-05
+          }
+        ],
+        "required_term_groups": [
+          [
+            "粒度",
+            "grain"
+          ],
+          [
+            "多对多",
+            "many-to-many"
+          ],
+          [
+            "先聚合",
+            "汇总后关联"
+          ]
+        ],
+        "metric_ids": [],
+        "visualization_types": [],
+        "plan_intents": [
+          "data_quality",
+          "metric_diagnostic"
+        ],
+        "clarification": false,
+        "clarification_terms": [],
+        "memory_used": null,
+        "min_fact_recall": 1.0,
+        "min_term_coverage": 0.67
+      }
+    },
+    {
+      "id": "review_grain_audit",
+      "category": "data_quality_grain",
+      "difficulty": "hard",
+      "language": "zh",
+      "datasets": [
+        "olist_orders_2017",
+        "olist_order_reviews_2017"
+      ],
+      "question": "评价表是否能直接按行计算平均分？请检查一笔订单多条评价的问题，给出存在重复评价的订单数，并比较原始评价行均值与订单级均值。解释推荐口径。",
+      "user_need": "避免重复评价改变客户体验指标",
+      "capability": "重复记录与分析粒度",
+      "expected": {
+        "facts": [
+          {
+            "id": "duplicate_review_orders",
+            "value": 120,
+            "tolerance": 0
+          },
+          {
+            "id": "raw_review_mean",
+            "value": 4.160559673062,
+            "tolerance": 0.0001
+          },
+          {
+            "id": "order_review_mean",
+            "value": 4.16155619194,
+            "tolerance": 0.0001
+          },
+          {
+            "id": "review_grain_delta",
+            "value": -0.000996518877,
+            "tolerance": 0.0001
+          }
+        ],
+        "required_term_groups": [
+          [
+            "订单级",
+            "按订单"
+          ],
+          [
+            "重复评价",
+            "多条评价"
+          ],
+          [
+            "加权",
+            "重权"
+          ]
+        ],
+        "metric_ids": [],
+        "visualization_types": [],
+        "plan_intents": [
+          "data_quality"
+        ],
+        "clarification": false,
+        "clarification_terms": [],
+        "memory_used": null,
+        "min_fact_recall": 1.0,
+        "min_term_coverage": 0.67
+      }
+    },
+    {
+      "id": "customer_identity_audit",
+      "category": "data_quality_grain",
+      "difficulty": "hard",
+      "language": "zh",
+      "datasets": [
+        "olist_orders_2017"
+      ],
+      "question": "复购分析应该使用customer_id还是customer_unique_id？请用数据验证两种标识得到的复购率差异，并解释选择理由。",
+      "user_need": "确认复购分析的客户主键",
+      "capability": "实体标识审计",
+      "expected": {
+        "facts": [
+          {
+            "id": "unique_id_repeat_rate",
+            "value": 0.028820710863,
+            "tolerance": 0.0001
+          },
+          {
+            "id": "customer_id_repeat_rate",
+            "value": 0.0,
+            "tolerance": 1e-06
+          }
+        ],
+        "required_term_groups": [
+          [
+            "customer_unique_id"
+          ],
+          [
+            "customer_id"
+          ],
+          [
+            "订单级",
+            "稳定客户"
+          ]
+        ],
+        "metric_ids": [
+          "ecommerce.repeat_purchase_rate"
+        ],
+        "visualization_types": [],
+        "plan_intents": [
+          "data_quality",
+          "metric_diagnostic"
+        ],
+        "clarification": false,
+        "clarification_terms": [],
+        "memory_used": null,
+        "min_fact_recall": 1.0,
+        "min_term_coverage": 1.0
+      }
+    },
+    {
+      "id": "missingness_business_impact",
+      "category": "data_quality_grain",
+      "difficulty": "hard",
+      "language": "zh",
+      "datasets": [
+        "olist_orders_2017",
+        "olist_order_reviews_2017"
+      ],
+      "question": "请检查会影响履约和评价分析的数据缺失：已交付订单缺少实际送达时间的数量、没有任何评价记录的订单数量及比例、评价行缺少评论正文的比例。区分这三类缺失的业务含义。",
+      "user_need": "理解缺失数据对经营结论的影响",
+      "capability": "数据画像与业务含义",
+      "expected": {
+        "facts": [
+          {
+            "id": "missing_delivery",
+            "value": 0,
+            "tolerance": 0
+          },
+          {
+            "id": "orders_without_review",
+            "value": 112,
+            "tolerance": 0
+          },
+          {
+            "id": "orders_without_review_rate",
+            "value": 0.007762145679,
+            "tolerance": 0.0001
+          },
+          {
+            "id": "missing_comment_rate",
+            "value": 0.58599432015,
+            "tolerance": 0.0001
+          }
+        ],
+        "required_term_groups": [
+          [
+            "送达时间"
+          ],
+          [
+            "没有评价",
+            "无评价记录"
+          ],
+          [
+            "评论正文",
+            "has_review_comment"
+          ]
+        ],
+        "metric_ids": [],
+        "visualization_types": [],
+        "plan_intents": [
+          "data_quality"
+        ],
+        "clarification": false,
+        "clarification_terms": [],
+        "memory_used": null,
+        "min_fact_recall": 1.0,
+        "min_term_coverage": 1.0
+      }
+    },
+    {
+      "id": "late_delivery_experience_gap",
+      "category": "business_diagnosis",
+      "difficulty": "hard",
+      "language": "zh",
+      "datasets": [
+        "olist_orders_2017",
+        "olist_order_reviews_2017"
+      ],
+      "question": "履约延迟与客户评分之间有什么关系？请比较准时和延迟订单的订单级平均评分、评分差距和延迟率，并明确这只能说明相关关系。提供对比图。",
+      "user_need": "判断履约问题是否伴随体验下降",
+      "capability": "分组比较与因果边界",
+      "expected": {
+        "facts": [
+          {
+            "id": "late_rate",
+            "value": 0.067849469818,
+            "tolerance": 0.0001
+          },
+          {
+            "id": "late_score",
+            "value": 2.498956158664,
+            "tolerance": 0.001
+          },
+          {
+            "id": "on_time_score",
+            "value": 4.280784489857,
+            "tolerance": 0.001
+          },
+          {
+            "id": "score_gap",
+            "value": 1.781828331193,
+            "tolerance": 0.001
+          }
+        ],
+        "required_term_groups": [
+          [
+            "相关",
+            "关联"
+          ],
+          [
+            "不能证明",
+            "不代表因果"
+          ],
+          [
+            "订单级",
+            "按订单"
+          ]
+        ],
+        "metric_ids": [],
+        "visualization_types": [
+          "bar"
+        ],
+        "plan_intents": [
+          "metric_diagnostic"
+        ],
+        "clarification": false,
+        "clarification_terms": [],
+        "memory_used": null,
+        "min_fact_recall": 1.0,
+        "min_term_coverage": 0.67
+      }
+    },
+    {
+      "id": "state_delivery_hotspot",
+      "category": "business_diagnosis",
+      "difficulty": "hard",
+      "language": "zh",
+      "datasets": [
+        "olist_orders_2017",
+        "olist_order_reviews_2017"
+      ],
+      "question": "为了避免小样本误导，只比较至少500个已交付订单的州。哪个州延迟率最高？请给出该州订单数、延迟率和平均评价分，并展示州级延迟率排名。",
+      "user_need": "定位履约改善优先区域",
+      "capability": "样本门槛与风险排名",
+      "expected": {
+        "facts": [
+          {
+            "id": "state",
+            "value": "RJ"
+          },
+          {
+            "id": "orders",
+            "value": 1962,
+            "tolerance": 0
+          },
+          {
+            "id": "late_rate",
+            "value": 0.104485219164,
+            "tolerance": 0.0001
+          },
+          {
+            "id": "review",
+            "value": 4.029623905204,
+            "tolerance": 0.001
+          }
+        ],
+        "required_term_groups": [
+          [
+            "500",
+            "样本量"
+          ],
+          [
+            "延迟率"
+          ]
+        ],
+        "metric_ids": [],
+        "visualization_types": [
+          "bar"
+        ],
+        "plan_intents": [
+          "ranking"
+        ],
+        "clarification": false,
+        "clarification_terms": [],
+        "memory_used": null,
+        "min_fact_recall": 1.0,
+        "min_term_coverage": 0.5
+      }
+    },
+    {
+      "id": "category_experience_problem",
+      "category": "business_diagnosis",
+      "difficulty": "hard",
+      "language": "zh",
+      "datasets": [
+        "olist_orders_2017",
+        "olist_order_items_2017",
+        "olist_products_2017",
+        "olist_order_reviews_2017"
+      ],
+      "question": "在至少500个已交付订单的品类中，找出平均评价最低的品类。请同时给出其商品收入和延迟率，判断它是否属于值得优先改善的高影响问题。",
+      "user_need": "寻找高影响低体验品类",
+      "capability": "多指标优先级诊断",
+      "expected": {
+        "facts": [
+          {
+            "id": "category",
+            "value": "furniture_decor"
+          },
+          {
+            "id": "revenue",
+            "value": 107663.67,
+            "tolerance": 0.01
+          },
+          {
+            "id": "review",
+            "value": 4.002487562189,
+            "tolerance": 0.001
+          },
+          {
+            "id": "late_rate",
+            "value": 0.099507389163,
+            "tolerance": 0.0001
+          }
+        ],
+        "required_term_groups": [
+          [
+            "500",
+            "样本量"
+          ],
+          [
+            "优先",
+            "改善"
+          ],
+          [
+            "影响",
+            "收入"
+          ]
+        ],
+        "metric_ids": [],
+        "visualization_types": [
+          "scatter",
+          "bar"
+        ],
+        "plan_intents": [
+          "ranking",
+          "metric_diagnostic"
+        ],
+        "clarification": false,
+        "clarification_terms": [],
+        "memory_used": null,
+        "min_fact_recall": 1.0,
+        "min_term_coverage": 0.67
+      }
+    },
+    {
+      "id": "seller_risk_diagnosis",
+      "category": "business_diagnosis",
+      "difficulty": "hard",
+      "language": "zh",
+      "datasets": [
+        "olist_orders_2017",
+        "olist_order_items_2017",
+        "olist_order_reviews_2017"
+      ],
+      "question": "请在收入前10%且至少50个已交付订单的卖家中，找出延迟率最高的卖家。给出卖家ID、收入、订单量、延迟率和评价分，并说明筛选门槛。",
+      "user_need": "识别需要治理的高影响卖家",
+      "capability": "约束筛选与风险排名",
+      "expected": {
+        "facts": [
+          {
+            "id": "seller",
+            "value": "77530e9772f57a62c906e1c21538ab82"
+          },
+          {
+            "id": "revenue",
+            "value": 7393.4,
+            "tolerance": 0.01
+          },
+          {
+            "id": "orders",
+            "value": 55,
+            "tolerance": 0
+          },
+          {
+            "id": "late_rate",
+            "value": 0.163636363636,
+            "tolerance": 0.0001
+          },
+          {
+            "id": "review",
+            "value": 3.981818181818,
+            "tolerance": 0.001
+          }
+        ],
+        "required_term_groups": [
+          [
+            "前10%",
+            "top 10"
+          ],
+          [
+            "50",
+            "样本量"
+          ],
+          [
+            "延迟率"
+          ]
+        ],
+        "metric_ids": [],
+        "visualization_types": [],
+        "plan_intents": [
+          "ranking"
+        ],
+        "clarification": false,
+        "clarification_terms": [],
+        "memory_used": null,
+        "min_fact_recall": 1.0,
+        "min_term_coverage": 0.67
+      }
+    },
+    {
+      "id": "monthly_decline_decomposition",
+      "category": "business_diagnosis",
+      "difficulty": "hard",
+      "language": "zh",
+      "datasets": [
+        "olist_orders_2017",
+        "olist_order_payments_2017"
+      ],
+      "question": "排除12月后，在2月至11月中找出GMV环比下降最严重的月份，并将变化拆解为订单量环比和AOV环比。说明主要下降驱动。",
+      "user_need": "解释经营下滑来自量还是价",
+      "capability": "环比异常与驱动拆解",
+      "expected": {
+        "facts": [
+          {
+            "id": "month",
+            "value": "2017-06"
+          },
+          {
+            "id": "gmv_mom",
+            "value": -0.182164973311,
+            "tolerance": 0.0001
+          },
+          {
+            "id": "orders_mom",
+            "value": -0.11120615911,
+            "tolerance": 0.0001
+          },
+          {
+            "id": "aov_mom",
+            "value": -0.079837202888,
+            "tolerance": 0.0001
+          }
+        ],
+        "required_term_groups": [
+          [
+            "订单量",
+            "订单数"
+          ],
+          [
+            "AOV",
+            "客单价"
+          ],
+          [
+            "主要",
+            "驱动"
+          ]
+        ],
+        "metric_ids": [],
+        "visualization_types": [
+          "line"
+        ],
+        "plan_intents": [
+          "trend"
+        ],
+        "clarification": false,
+        "clarification_terms": [],
+        "memory_used": null,
+        "min_fact_recall": 1.0,
+        "min_term_coverage": 1.0
+      }
+    },
+    {
+      "id": "regional_growth_priority",
+      "category": "decision_support",
+      "difficulty": "hard",
+      "language": "zh",
+      "datasets": [
+        "olist_orders_2017",
+        "olist_order_payments_2017"
+      ],
+      "question": "如果暂不考虑SP，希望选择一个已有规模基础的州作为下一步重点市场，请基于已交付支付GMV、订单规模和AOV提出优先州，并用数据解释建议和风险。",
+      "user_need": "选择重点市场并说明依据",
+      "capability": "证据驱动的经营建议",
+      "expected": {
+        "facts": [
+          {
+            "id": "state",
+            "value": "RJ"
+          },
+          {
+            "id": "gmv",
+            "value": 325656.41,
+            "tolerance": 0.01
+          },
+          {
+            "id": "aov",
+            "value": 165.981860346585,
+            "tolerance": 0.01
+          }
+        ],
+        "required_term_groups": [
+          [
+            "建议",
+            "优先"
+          ],
+          [
+            "风险",
+            "限制"
+          ],
+          [
+            "订单",
+            "规模"
+          ]
+        ],
+        "metric_ids": [],
+        "visualization_types": [
+          "bar",
+          "scatter"
+        ],
+        "plan_intents": [
+          "ranking",
+          "metric_diagnostic"
+        ],
+        "clarification": false,
+        "clarification_terms": [],
+        "memory_used": null,
+        "min_fact_recall": 1.0,
+        "min_term_coverage": 0.67
+      }
+    },
+    {
+      "id": "fulfillment_action_plan",
+      "category": "decision_support",
+      "difficulty": "hard",
+      "language": "zh",
+      "datasets": [
+        "olist_orders_2017",
+        "olist_order_reviews_2017"
+      ],
+      "question": "请制定履约改善优先级：量化总体延迟订单规模和延迟率、评分损失，并指出最需要关注的州。最后给出两项与证据对应的行动建议，不要声称已经证明因果。",
+      "user_need": "把履约分析转成行动优先级",
+      "capability": "量化诊断与可执行建议",
+      "expected": {
+        "facts": [
+          {
+            "id": "late_orders",
+            "value": 979,
+            "tolerance": 0
+          },
+          {
+            "id": "late_rate",
+            "value": 0.067849469818,
+            "tolerance": 0.0001
+          },
+          {
+            "id": "score_gap",
+            "value": 1.781828331193,
+            "tolerance": 0.001
+          },
+          {
+            "id": "state",
+            "value": "RJ"
+          }
+        ],
+        "required_term_groups": [
+          [
+            "建议",
+            "行动"
+          ],
+          [
+            "相关",
+            "不能证明"
+          ],
+          [
+            "优先",
+            "关注"
+          ]
+        ],
+        "metric_ids": [],
+        "visualization_types": [],
+        "plan_intents": [],
+        "clarification": false,
+        "clarification_terms": [],
+        "memory_used": null,
+        "min_fact_recall": 1.0,
+        "min_term_coverage": 1.0
+      }
+    },
+    {
+      "id": "category_portfolio_strategy",
+      "category": "decision_support",
+      "difficulty": "hard",
+      "language": "zh",
+      "datasets": [
+        "olist_orders_2017",
+        "olist_order_items_2017",
+        "olist_products_2017",
+        "olist_order_reviews_2017"
+      ],
+      "question": "请把品类经营分成“保持增长”和“优先改善”两类：识别收入第一的核心品类，以及在至少500单品类中评价最低的问题品类，并给出各自的关键证据和建议。",
+      "user_need": "形成品类组合策略",
+      "capability": "多目标分类与建议",
+      "expected": {
+        "facts": [
+          {
+            "id": "growth_category",
+            "value": "bed_bath_table"
+          },
+          {
+            "id": "growth_revenue",
+            "value": 169784.27,
+            "tolerance": 0.01
+          },
+          {
+            "id": "problem_category",
+            "value": "furniture_decor"
+          },
+          {
+            "id": "problem_review",
+            "value": 4.002487562189,
+            "tolerance": 0.001
+          }
+        ],
+        "required_term_groups": [
+          [
+            "保持增长",
+            "增长"
+          ],
+          [
+            "优先改善",
+            "改善"
+          ],
+          [
+            "证据",
+            "收入",
+            "评价"
+          ]
+        ],
+        "metric_ids": [],
+        "visualization_types": [],
+        "plan_intents": [],
+        "clarification": false,
+        "clarification_terms": [],
+        "memory_used": null,
+        "min_fact_recall": 1.0,
+        "min_term_coverage": 1.0
+      }
+    },
+    {
+      "id": "seller_governance_strategy",
+      "category": "decision_support",
+      "difficulty": "hard",
+      "language": "zh",
+      "datasets": [
+        "olist_orders_2017",
+        "olist_order_items_2017",
+        "olist_order_reviews_2017"
+      ],
+      "question": "请为卖家治理提出一个可执行的优先对象：限定收入前10%且订单数不少于50，选择延迟风险最高的卖家，说明其规模、履约和评价证据，并提出后续核查动作。",
+      "user_need": "形成卖家治理对象和后续动作",
+      "capability": "风险筛选与行动建议",
+      "expected": {
+        "facts": [
+          {
+            "id": "seller",
+            "value": "77530e9772f57a62c906e1c21538ab82"
+          },
+          {
+            "id": "orders",
+            "value": 55,
+            "tolerance": 0
+          },
+          {
+            "id": "late_rate",
+            "value": 0.163636363636,
+            "tolerance": 0.0001
+          },
+          {
+            "id": "review",
+            "value": 3.981818181818,
+            "tolerance": 0.001
+          }
+        ],
+        "required_term_groups": [
+          [
+            "核查",
+            "建议",
+            "行动"
+          ],
+          [
+            "收入前10%",
+            "top 10"
+          ],
+          [
+            "50"
+          ]
+        ],
+        "metric_ids": [],
+        "visualization_types": [],
+        "plan_intents": [],
+        "clarification": false,
+        "clarification_terms": [],
+        "memory_used": null,
+        "min_fact_recall": 1.0,
+        "min_term_coverage": 0.67
+      }
+    },
+    {
+      "id": "channel_quality_clarification",
+      "category": "clarification_boundary",
+      "difficulty": "hard",
+      "language": "zh",
+      "datasets": [
+        "olist_orders_2017",
+        "olist_order_payments_2017"
+      ],
+      "question": "哪个获客渠道的新客质量最好？请比较各渠道的新客复购和客单价。",
+      "user_need": "在数据不足时先澄清而不是编造",
+      "capability": "缺字段与指标口径澄清",
+      "expected": {
+        "facts": [],
+        "required_term_groups": [
+          [
+            "缺少",
+            "没有",
+            "无法"
+          ],
+          [
+            "渠道"
+          ],
+          [
+            "新客",
+            "首次"
+          ]
+        ],
+        "metric_ids": [],
+        "visualization_types": [],
+        "plan_intents": [],
+        "clarification": true,
+        "clarification_terms": [
+          "渠道",
+          "字段",
+          "新客",
+          "首次"
+        ],
+        "memory_used": null,
+        "min_fact_recall": 1.0,
+        "min_term_coverage": 0.67
+      }
+    },
+    {
+      "id": "profit_metric_clarification",
+      "category": "clarification_boundary",
+      "difficulty": "hard",
+      "language": "zh",
+      "datasets": [
+        "olist_orders_2017",
+        "olist_order_items_2017",
+        "olist_products_2017"
+      ],
+      "question": "哪个商品品类利润最高？请给出利润额和利润率排名。",
+      "user_need": "在利润数据缺失时拒绝伪造",
+      "capability": "不可计算指标澄清",
+      "expected": {
+        "facts": [],
+        "required_term_groups": [
+          [
+            "成本",
+            "进货成本"
+          ],
+          [
+            "利润",
+            "毛利"
+          ],
+          [
+            "缺少",
+            "没有",
+            "无法"
+          ]
+        ],
+        "metric_ids": [],
+        "visualization_types": [],
+        "plan_intents": [],
+        "clarification": true,
+        "clarification_terms": [
+          "成本",
+          "利润",
+          "毛利",
+          "字段"
+        ],
+        "memory_used": null,
+        "min_fact_recall": 1.0,
+        "min_term_coverage": 1.0
+      }
+    },
+    {
+      "id": "causal_claim_boundary",
+      "category": "clarification_boundary",
+      "difficulty": "hard",
+      "language": "zh",
+      "datasets": [
+        "olist_orders_2017",
+        "olist_order_reviews_2017"
+      ],
+      "question": "请证明延迟送达导致客户评分下降，并告诉我延迟造成了多少评分损失。",
+      "user_need": "避免把观察数据相关性写成因果",
+      "capability": "统计边界与谨慎表达",
+      "expected": {
+        "facts": [
+          {
+            "id": "late_rate",
+            "value": 0.067849469818,
+            "tolerance": 0.0001
+          },
+          {
+            "id": "association_gap",
+            "value": 1.781828331193,
+            "tolerance": 0.001
+          }
+        ],
+        "required_term_groups": [
+          [
+            "不能证明",
+            "无法证明",
+            "不代表因果"
+          ],
+          [
+            "相关",
+            "关联"
+          ],
+          [
+            "混杂",
+            "其他因素",
+            "实验"
+          ]
+        ],
+        "metric_ids": [],
+        "visualization_types": [],
+        "plan_intents": [
+          "metric_diagnostic"
+        ],
+        "clarification": false,
+        "clarification_terms": [],
+        "memory_used": null,
+        "min_fact_recall": 1.0,
+        "min_term_coverage": 0.67
+      }
+    },
+    {
+      "id": "state_category_followup",
+      "category": "multi_turn_memory",
+      "difficulty": "hard",
+      "language": "zh",
+      "datasets": [
+        "olist_orders_2017",
+        "olist_order_items_2017",
+        "olist_order_payments_2017",
+        "olist_products_2017"
+      ],
+      "user_need": "基于前一轮结果继续缩小分析范围",
+      "capability": "指代消解、可信记忆与重新计算",
+      "turns": [
+        {
+          "question": "2017年已交付支付GMV最高的是哪个州？给出该州GMV。",
+          "expected": {
+            "facts": [
+              {
+                "id": "state",
+                "value": "SP"
+              },
+              {
+                "id": "gmv",
+                "value": 809172.93,
+                "tolerance": 0.01
+              }
+            ],
+            "required_term_groups": [],
+            "metric_ids": [
+              "ecommerce.gmv"
+            ],
+            "visualization_types": [],
+            "plan_intents": [],
+            "clarification": false,
+            "clarification_terms": [],
+            "memory_used": null,
+            "min_fact_recall": 1.0,
+            "min_term_coverage": 0.5
+          }
+        },
+        {
+          "question": "只看这个州，哪个商品品类收入最高？商品收入只计算price，并给出该品类收入。",
+          "expected": {
+            "facts": [
+              {
+                "id": "category",
+                "value": "bed_bath_table"
+              },
+              {
+                "id": "revenue",
+                "value": 69038.26,
+                "tolerance": 0.01
+              }
+            ],
+            "required_term_groups": [
+              [
+                "SP"
+              ],
+              [
+                "price",
+                "商品收入"
+              ]
+            ],
+            "metric_ids": [],
+            "visualization_types": [],
+            "plan_intents": [],
+            "clarification": false,
+            "clarification_terms": [],
+            "memory_used": true,
+            "min_fact_recall": 1.0,
+            "min_term_coverage": 1.0
+          }
+        }
+      ]
+    },
+    {
+      "id": "experience_executive_followup",
+      "category": "multi_turn_memory",
+      "difficulty": "hard",
+      "language": "zh",
+      "datasets": [
+        "olist_orders_2017",
+        "olist_order_reviews_2017"
+      ],
+      "user_need": "将已有分析转成管理层摘要",
+      "capability": "多轮记忆、重算与报告组织",
+      "turns": [
+        {
+          "question": "分析已交付订单的延迟与评价关系，比较准时和延迟订单评分并说明边界。",
+          "expected": {
+            "facts": [
+              {
+                "id": "late",
+                "value": 2.498956158664,
+                "tolerance": 0.001
+              },
+              {
+                "id": "on_time",
+                "value": 4.280784489857,
+                "tolerance": 0.001
+              },
+              {
+                "id": "gap",
+                "value": 1.781828331193,
+                "tolerance": 0.001
+              }
+            ],
+            "required_term_groups": [
+              [
+                "相关",
+                "不代表因果"
+              ]
+            ],
+            "metric_ids": [],
+            "visualization_types": [],
+            "plan_intents": [],
+            "clarification": false,
+            "clarification_terms": [],
+            "memory_used": null,
+            "min_fact_recall": 1.0,
+            "min_term_coverage": 0.5
+          }
+        },
+        {
+          "question": "把刚才的分析整理成管理层摘要：保留关键数字、结论、限制和两项下一步建议。",
+          "expected": {
+            "facts": [
+              {
+                "id": "late_rate",
+                "value": 0.067849469818,
+                "tolerance": 0.0001
+              },
+              {
+                "id": "gap",
+                "value": 1.781828331193,
+                "tolerance": 0.001
+              }
+            ],
+            "required_term_groups": [
+              [
+                "限制",
+                "边界"
+              ],
+              [
+                "建议",
+                "下一步"
+              ],
+              [
+                "相关",
+                "因果"
+              ]
+            ],
+            "metric_ids": [],
+            "visualization_types": [],
+            "plan_intents": [],
+            "clarification": false,
+            "clarification_terms": [],
+            "memory_used": true,
+            "min_fact_recall": 1.0,
+            "min_term_coverage": 1.0
+          }
+        }
+      ]
+    }
+  ]
+}

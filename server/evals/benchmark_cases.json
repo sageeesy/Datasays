@@ -1,269 +1,486 @@
 {
-  "benchmark_name": "datasays_tabular_qa_mini",
-  "description": "A balanced closed-form benchmark inspired by DS-1000-style executable scoring and DABench/DABstep-style tabular data analysis tasks.",
+  "benchmark_name": "datasays_olist_business_analytics_v1",
+  "version": "1.1.0",
+  "description": "A 24-case bilingual business-analytics benchmark adapted from the public Olist Brazilian ecommerce dataset, with deterministic numeric answers and explicit grain rules.",
+  "description_zh": "基于 Olist 巴西电商公开数据改编的 24 题中英双语经营分析 Benchmark，包含确定性数值答案和明确的数据粒度规则。",
+  "source": {
+    "name": "Brazilian E-Commerce Public Dataset by Olist",
+    "url": "https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce",
+    "license": "CC BY-NC-SA 4.0",
+    "prepared_scope": "Deterministic customer-level sample of 15,000 orders purchased during calendar year 2017",
+    "prepared_scope_zh": "2017 自然年内下单的 15,000 笔客户级确定性抽样订单及关联记录",
+    "sampling": {
+      "target_orders": 15000,
+      "actual_orders": 15000,
+      "unit": "customer_unique_id",
+      "method": "sha256_ranked_customer_sample",
+      "relationship_policy": "keep_all_selected_customer_orders_and_filter_child_tables_by_foreign_key"
+    }
+  },
   "datasets": {
-    "sales": {
-      "path": "data/sales.csv"
+    "olist_orders_2017": {
+      "path": "data/olist/olist_orders_2017.csv",
+      "grain": "one row per order"
     },
-    "products": {
-      "path": "data/products.csv"
+    "olist_order_items_2017": {
+      "path": "data/olist/olist_order_items_2017.csv",
+      "grain": "one row per order item"
     },
-    "diabetes_toy": {
-      "path": "data/diabetes_toy.csv"
+    "olist_order_payments_2017": {
+      "path": "data/olist/olist_order_payments_2017.csv",
+      "grain": "one row per payment sequence"
     },
-    "data_quality": {
-      "path": "data/data_quality.csv"
+    "olist_order_reviews_2017": {
+      "path": "data/olist/olist_order_reviews_2017.csv",
+      "grain": "one row per review record"
+    },
+    "olist_products_2017": {
+      "path": "data/olist/olist_products_2017.csv",
+      "grain": "one row per product"
     }
   },
   "defaults": {
     "prompt_style": "zero",
-    "tolerance": 0.001
+    "tolerance": 0.001,
+    "allow_legacy_text_scoring": false
   },
   "cases": [
     {
-      "id": "row_count",
-      "datasets": ["sales"],
-      "category": "basic_statistics",
+      "id": "orders_total_2017",
+      "datasets": [
+        "olist_orders_2017"
+      ],
+      "category": "order_lifecycle",
       "difficulty": "easy",
-      "inspired_by": ["DABench"],
-      "question": "How many data rows are in this CSV file? Return a single number.",
+      "language": "en",
+      "source": "Olist Brazilian E-Commerce Public Dataset",
+      "question": "How many orders were purchased during calendar year 2017 in the orders CSV? Count distinct order_id and return one number.",
       "expected_type": "number",
-      "expected_value": 5
+      "expected_value": 15000.0,
+      "tolerance": 0,
+      "metric_definition": "count_distinct(order_id)",
+      "failure_mode": "Counting rows without checking the order grain.",
+      "expected_metric_ids": [
+        "ecommerce.order_count"
+      ]
     },
     {
-      "id": "average_sales",
-      "datasets": ["sales"],
-      "category": "basic_statistics",
+      "id": "delivered_order_rate",
+      "datasets": [
+        "olist_orders_2017"
+      ],
+      "category": "order_lifecycle",
       "difficulty": "easy",
-      "inspired_by": ["DABench"],
-      "question": "What is the average Sales value across all rows? Return a single number.",
+      "language": "zh",
+      "source": "Olist Brazilian E-Commerce Public Dataset",
+      "question": "2017 年订单中，order_status 等于 delivered 的订单占全部订单的比例是多少？返回 0 到 1 之间的一个数字。",
       "expected_type": "number",
-      "expected_value": 1172
+      "expected_value": 0.9619333333333333,
+      "tolerance": 0.0001,
+      "metric_definition": "delivered distinct orders / all distinct orders",
+      "failure_mode": "Returning a percentage from 0 to 100 instead of a fraction from 0 to 1."
     },
     {
-      "id": "max_quantity",
-      "datasets": ["sales"],
-      "category": "basic_statistics",
-      "difficulty": "easy",
-      "inspired_by": ["DS-1000", "DABench"],
-      "question": "What is the maximum Quantity value? Return a single number.",
-      "expected_type": "number",
-      "expected_value": 52
-    },
-    {
-      "id": "south_sales_sum",
-      "datasets": ["sales"],
-      "category": "filter_aggregate",
-      "difficulty": "easy",
-      "inspired_by": ["DABench"],
-      "question": "What is the total Sales value for rows where Region is South? Return a single number.",
-      "expected_type": "number",
-      "expected_value": 1840
-    },
-    {
-      "id": "quantity_above_40_sales_sum",
-      "datasets": ["sales"],
-      "category": "filter_aggregate",
-      "difficulty": "easy",
-      "inspired_by": ["DABench"],
-      "question": "What is the total Sales value for rows where Quantity is greater than 40? Return a single number.",
-      "expected_type": "number",
-      "expected_value": 4020
-    },
-    {
-      "id": "widget_a_avg_quantity",
-      "datasets": ["sales"],
-      "category": "filter_aggregate",
-      "difficulty": "easy",
-      "inspired_by": ["DABench"],
-      "question": "What is the average Quantity for Product Widget A? Return a single number.",
-      "expected_type": "number",
-      "expected_value": 46.5
-    },
-    {
-      "id": "top_region_sales_total",
-      "datasets": ["sales"],
-      "category": "groupby_aggregate",
+      "id": "peak_delivered_month_order_count",
+      "datasets": [
+        "olist_orders_2017"
+      ],
+      "category": "order_lifecycle",
       "difficulty": "medium",
-      "inspired_by": ["DABench", "DABstep"],
-      "question": "Group the sales data by Region. What is the highest total Sales value among all regions? Return a single number.",
+      "language": "en",
+      "source": "Olist Brazilian E-Commerce Public Dataset",
+      "question": "For delivered orders, group distinct order_id by purchase calendar month. What is the highest monthly order count? Return that count as primary_value and include the monthly series for a line chart.",
       "expected_type": "number",
-      "expected_value": 2570
+      "expected_value": 2435.0,
+      "tolerance": 0,
+      "metric_definition": "max(monthly count_distinct(order_id))",
+      "failure_mode": "Counting item rows or using incomplete months outside the prepared 2017 fixture.",
+      "expected_metric_ids": [
+        "ecommerce.order_count"
+      ],
+      "expected_visualization_types": [
+        "line"
+      ]
     },
     {
-      "id": "lowest_product_sales_total",
-      "datasets": ["sales"],
-      "category": "groupby_aggregate",
+      "id": "late_delivery_rate",
+      "datasets": [
+        "olist_orders_2017"
+      ],
+      "category": "order_lifecycle",
       "difficulty": "medium",
-      "inspired_by": ["DABench", "DABstep"],
-      "question": "Group the sales data by Product. What is the lowest total Sales value among all products? Return a single number.",
+      "language": "zh",
+      "source": "Olist Brazilian E-Commerce Public Dataset",
+      "question": "仅对 delivered 且实际送达日期和预计送达日期都不为空的订单，实际送达时间晚于预计送达时间的订单比例是多少？返回 0 到 1 之间的一个数字。",
       "expected_type": "number",
-      "expected_value": 1450
+      "expected_value": 0.06784946981772819,
+      "tolerance": 0.0001,
+      "metric_definition": "late delivered orders / delivered orders with both delivery dates",
+      "failure_mode": "Including missing delivery dates in the denominator."
     },
     {
-      "id": "regions_above_1500_total_sales",
-      "datasets": ["sales"],
-      "category": "groupby_aggregate",
+      "id": "median_delivery_days",
+      "datasets": [
+        "olist_orders_2017"
+      ],
+      "category": "order_lifecycle",
       "difficulty": "medium",
-      "inspired_by": ["DABench", "DABstep"],
-      "question": "Group the sales data by Region and sum Sales. How many regions have total Sales greater than 1500? Return a single number.",
+      "language": "en",
+      "source": "Olist Brazilian E-Commerce Public Dataset",
+      "question": "Among delivered orders with an actual delivery timestamp, what is the median elapsed time in days from order_purchase_timestamp to order_delivered_customer_date? Use exact timestamp differences and return one number.",
       "expected_type": "number",
-      "expected_value": 2
+      "expected_value": 11.075717592592593,
+      "tolerance": 0.001,
+      "metric_definition": "median((delivered_at - purchased_at).total_seconds / 86400)",
+      "failure_mode": "Using date-only differences or the mean instead of the median."
     },
     {
-      "id": "date_range_days",
-      "datasets": ["sales"],
-      "category": "date_time_analysis",
+      "id": "delivered_payment_gmv",
+      "datasets": [
+        "olist_orders_2017",
+        "olist_order_payments_2017"
+      ],
+      "category": "payments",
       "difficulty": "medium",
-      "inspired_by": ["DABstep"],
-      "question": "Using the Date column, how many days are between the earliest date and the latest date in the sales CSV? Return a single number.",
+      "language": "zh",
+      "source": "Olist Brazilian E-Commerce Public Dataset",
+      "question": "将订单表与支付表按 order_id 关联，仅保留 delivered 订单。以 payment_value 之和定义本题 GMV，GMV 是多少？返回一个金额数字。",
       "expected_type": "number",
-      "expected_value": 4
+      "expected_value": 2320454.3899999997,
+      "tolerance": 0.01,
+      "metric_definition": "sum(payment_value for delivered orders)",
+      "failure_mode": "Joining payments to item rows and multiplying payment values.",
+      "expected_metric_ids": [
+        "ecommerce.gmv"
+      ]
     },
     {
-      "id": "sales_before_jan18",
-      "datasets": ["sales"],
-      "category": "date_time_analysis",
+      "id": "delivered_aov",
+      "datasets": [
+        "olist_orders_2017",
+        "olist_order_payments_2017"
+      ],
+      "category": "payments",
       "difficulty": "medium",
-      "inspired_by": ["DABstep"],
-      "question": "Using the Date column, what is the total Sales value for rows before 2024-01-18? Return a single number.",
+      "language": "en",
+      "source": "Olist Brazilian E-Commerce Public Dataset",
+      "question": "For delivered orders with payment records, define AOV as total payment_value divided by the distinct number of paid delivered order_id values. What is the AOV? Return one number.",
       "expected_type": "number",
-      "expected_value": 3590
+      "expected_value": 160.81879478827358,
+      "tolerance": 0.01,
+      "metric_definition": "sum(payment_value) / count_distinct(paid delivered order_id)",
+      "failure_mode": "Averaging payment rows instead of aggregating payments to order grain.",
+      "expected_metric_ids": [
+        "ecommerce.aov"
+      ]
     },
     {
-      "id": "sales_on_or_after_jan17",
-      "datasets": ["sales"],
-      "category": "date_time_analysis",
+      "id": "credit_card_payment_value_share",
+      "datasets": [
+        "olist_orders_2017",
+        "olist_order_payments_2017"
+      ],
+      "category": "payments",
       "difficulty": "medium",
-      "inspired_by": ["DABstep"],
-      "question": "Using the Date column, what is the total Sales value for rows on or after 2024-01-17? Return a single number.",
+      "language": "zh",
+      "source": "Olist Brazilian E-Commerce Public Dataset",
+      "question": "在 delivered 订单的全部 payment_value 中，payment_type 为 credit_card 的金额占比是多少？返回 0 到 1 之间的一个数字。",
       "expected_type": "number",
-      "expected_value": 3720
+      "expected_value": 0.7791647695346429,
+      "tolerance": 0.0001,
+      "metric_definition": "credit-card payment value / all payment value for delivered orders",
+      "failure_mode": "Using payment-row count share instead of payment-value share."
     },
     {
-      "id": "hardware_profit_join",
-      "datasets": ["sales", "products"],
-      "category": "multi_table_join",
+      "id": "multi_payment_order_rate",
+      "datasets": [
+        "olist_orders_2017",
+        "olist_order_payments_2017"
+      ],
+      "category": "payments",
+      "difficulty": "hard",
+      "language": "en",
+      "source": "Olist Brazilian E-Commerce Public Dataset",
+      "question": "Among delivered orders that have at least one payment row, what fraction have more than one payment row? Aggregate payment rows by order_id first and return a number between 0 and 1.",
+      "expected_type": "number",
+      "expected_value": 0.03451382632199044,
+      "tolerance": 0.0001,
+      "metric_definition": "orders with payment row count > 1 / delivered orders with payments",
+      "failure_mode": "Using payment_sequential values or payment-row share as the denominator."
+    },
+    {
+      "id": "sp_delivered_payment_gmv",
+      "datasets": [
+        "olist_orders_2017",
+        "olist_order_payments_2017"
+      ],
+      "category": "payments",
       "difficulty": "medium",
-      "inspired_by": ["DABstep"],
-      "question": "Join the sales CSV with the products CSV on Product. Define row profit as Sales - UnitCost * Quantity. What is the total profit for rows where Category is Hardware? Return a single number.",
+      "language": "zh",
+      "source": "Olist Brazilian E-Commerce Public Dataset",
+      "question": "仅统计 customer_state 为 SP 且状态为 delivered 的订单，先按订单汇总 payment_value，再计算支付 GMV。结果是多少？返回一个金额数字，并附上各州 GMV 用于柱状图。",
       "expected_type": "number",
-      "expected_value": 1306
+      "expected_value": 809172.93,
+      "tolerance": 0.01,
+      "metric_definition": "sum(order-level payment_value for delivered SP orders)",
+      "failure_mode": "Duplicating payment values or filtering state after an unsafe join.",
+      "expected_metric_ids": [
+        "ecommerce.gmv"
+      ],
+      "expected_visualization_types": [
+        "bar"
+      ]
     },
     {
-      "id": "total_profit_join",
-      "datasets": ["sales", "products"],
-      "category": "multi_table_join",
+      "id": "delivered_item_revenue",
+      "datasets": [
+        "olist_orders_2017",
+        "olist_order_items_2017"
+      ],
+      "category": "merchandising",
       "difficulty": "medium",
-      "inspired_by": ["DABstep"],
-      "question": "Join the sales CSV with the products CSV on Product. Define row profit as Sales - UnitCost * Quantity. What is the total profit across all rows? Return a single number.",
+      "language": "en",
+      "source": "Olist Brazilian E-Commerce Public Dataset",
+      "question": "For delivered orders, what is the total merchandise value defined strictly as the sum of item price, excluding freight? Return one number.",
       "expected_type": "number",
-      "expected_value": 2342
+      "expected_value": 1998438.7000000004,
+      "tolerance": 0.01,
+      "metric_definition": "sum(item price for delivered orders)",
+      "failure_mode": "Including freight or counting non-delivered orders."
     },
     {
-      "id": "best_product_profit_join",
-      "datasets": ["sales", "products"],
-      "category": "multi_step_join_groupby",
+      "id": "freight_share_of_item_billed_value",
+      "datasets": [
+        "olist_orders_2017",
+        "olist_order_items_2017"
+      ],
+      "category": "merchandising",
       "difficulty": "medium",
-      "inspired_by": ["DABstep"],
-      "question": "Join the sales CSV with the products CSV on Product. Define row profit as Sales - UnitCost * Quantity. Group by Product and find the highest total profit achieved by any product. Return only that highest profit value as a single number.",
+      "language": "zh",
+      "source": "Olist Brazilian E-Commerce Public Dataset",
+      "question": "对 delivered 订单明细，以 sum(freight_value) / (sum(price) + sum(freight_value)) 计算运费占商品加运费总额的比例。返回 0 到 1 之间的一个数字。",
       "expected_type": "number",
-      "expected_value": 1036
+      "expected_value": 0.1385949787197769,
+      "tolerance": 0.0001,
+      "metric_definition": "sum(freight) / (sum(item price) + sum(freight))",
+      "failure_mode": "Averaging row-level freight percentages instead of using ratio of sums."
     },
     {
-      "id": "missing_cell_count",
-      "datasets": ["data_quality"],
-      "category": "data_quality",
-      "difficulty": "easy",
-      "inspired_by": ["DABench", "DABstep"],
-      "question": "In the data_quality CSV, how many missing or blank cells are there across the entire table? Return a single number.",
+      "id": "top_category_item_revenue",
+      "datasets": [
+        "olist_orders_2017",
+        "olist_order_items_2017",
+        "olist_products_2017"
+      ],
+      "category": "merchandising",
+      "difficulty": "hard",
+      "language": "en",
+      "source": "Olist Brazilian E-Commerce Public Dataset",
+      "question": "Join delivered order items to products on product_id, group by product_category_name_english, and sum item price. What is the highest category revenue? Return that revenue as primary_value and include the category ranking for a bar chart.",
       "expected_type": "number",
-      "expected_value": 3
+      "expected_value": 169784.27,
+      "tolerance": 0.01,
+      "metric_definition": "max(category sum(item price))",
+      "failure_mode": "Joining on the wrong key, including freight, or returning the category label instead of its value.",
+      "expected_visualization_types": [
+        "bar"
+      ]
     },
     {
-      "id": "age_mean_zero_as_missing",
-      "datasets": ["data_quality"],
-      "category": "data_cleaning",
+      "id": "top_category_item_count",
+      "datasets": [
+        "olist_orders_2017",
+        "olist_order_items_2017",
+        "olist_products_2017"
+      ],
+      "category": "merchandising",
+      "difficulty": "hard",
+      "language": "zh",
+      "source": "Olist Brazilian E-Commerce Public Dataset",
+      "question": "将 delivered 订单明细与商品表按 product_id 关联，按 product_category_name_english 分组。销量最高品类的商品明细行数是多少？返回最高行数，不要返回品类名称。",
+      "expected_type": "number",
+      "expected_value": 1755.0,
+      "tolerance": 0,
+      "metric_definition": "max(category count(order-item rows))",
+      "failure_mode": "Counting distinct orders or products instead of sold item rows."
+    },
+    {
+      "id": "top_seller_item_revenue",
+      "datasets": [
+        "olist_orders_2017",
+        "olist_order_items_2017"
+      ],
+      "category": "merchandising",
+      "difficulty": "hard",
+      "language": "en",
+      "source": "Olist Brazilian E-Commerce Public Dataset",
+      "question": "For delivered order items, group by seller_id and sum item price. What is the highest revenue achieved by any one seller? Return only that highest revenue value.",
+      "expected_type": "number",
+      "expected_value": 59783.57,
+      "tolerance": 0.01,
+      "metric_definition": "max(seller sum(item price))",
+      "failure_mode": "Returning the seller ID, using freight, or failing to filter delivered orders."
+    },
+    {
+      "id": "multi_item_order_rate",
+      "datasets": [
+        "olist_orders_2017",
+        "olist_order_items_2017"
+      ],
+      "category": "merchandising",
+      "difficulty": "hard",
+      "language": "zh",
+      "source": "Olist Brazilian E-Commerce Public Dataset",
+      "question": "在至少有一条商品明细的 delivered 订单中，包含多于一条 order item 的订单比例是多少？先按 order_id 统计明细行数，返回 0 到 1 之间的数字。",
+      "expected_type": "number",
+      "expected_value": 0.10312564973317624,
+      "tolerance": 0.0001,
+      "metric_definition": "delivered orders with item row count > 1 / delivered orders with items",
+      "failure_mode": "Using the share of item rows belonging to multi-item orders."
+    },
+    {
+      "id": "repeat_buyer_rate",
+      "datasets": [
+        "olist_orders_2017"
+      ],
+      "category": "customer_experience",
+      "difficulty": "hard",
+      "language": "en",
+      "source": "Olist Brazilian E-Commerce Public Dataset",
+      "question": "Within the prepared 2017 data, among customer_unique_id values with at least one delivered order, what fraction placed more than one distinct delivered order? Return a number between 0 and 1.",
+      "expected_type": "number",
+      "expected_value": 0.028820710863191018,
+      "tolerance": 0.0001,
+      "metric_definition": "customers with >1 distinct delivered order / delivered purchasing customers",
+      "failure_mode": "Using customer_id, which is order-scoped in Olist, instead of customer_unique_id.",
+      "expected_metric_ids": [
+        "ecommerce.repeat_purchase_rate"
+      ]
+    },
+    {
+      "id": "delivered_average_review_score",
+      "datasets": [
+        "olist_orders_2017",
+        "olist_order_reviews_2017"
+      ],
+      "category": "customer_experience",
       "difficulty": "medium",
-      "inspired_by": ["DABench", "DABstep"],
-      "question": "In the data_quality CSV, treat Age value 0 as missing and ignore blank Age values. What is the mean Age? Return a single number.",
+      "language": "zh",
+      "source": "Olist Brazilian E-Commerce Public Dataset",
+      "question": "对 delivered 订单，若同一 order_id 有多条评价，先计算该订单的平均 review_score，再计算所有有评价订单的平均分。结果是多少？",
       "expected_type": "number",
-      "expected_value": 32.25
+      "expected_value": 4.161556191939652,
+      "tolerance": 0.001,
+      "metric_definition": "mean(order-level mean review_score for delivered orders)",
+      "failure_mode": "Averaging raw review rows without resolving duplicate reviews per order."
     },
     {
-      "id": "income_mean_ignore_missing",
-      "datasets": ["data_quality"],
-      "category": "data_quality",
-      "difficulty": "easy",
-      "inspired_by": ["DABench"],
-      "question": "In the data_quality CSV, what is the mean Income value when blank Income values are ignored? Return a single number.",
+      "id": "late_delivery_average_review_score",
+      "datasets": [
+        "olist_orders_2017",
+        "olist_order_reviews_2017"
+      ],
+      "category": "customer_experience",
+      "difficulty": "hard",
+      "language": "en",
+      "source": "Olist Brazilian E-Commerce Public Dataset",
+      "question": "For delivered orders with both actual and estimated delivery dates, mark an order late when actual delivery is after the estimate. After averaging duplicate reviews per order, what is the average review score for late orders? Return one number and include the on-time versus late comparison for a bar chart.",
       "expected_type": "number",
-      "expected_value": 58400
+      "expected_value": 2.498956158663883,
+      "tolerance": 0.001,
+      "metric_definition": "mean(order-level review score where actual delivery > estimate)",
+      "failure_mode": "Comparing the wrong timestamps or allowing duplicate review rows to reweight orders.",
+      "expected_visualization_types": [
+        "bar"
+      ]
     },
     {
-      "id": "churn_rate",
-      "datasets": ["data_quality"],
-      "category": "filter_aggregate",
-      "difficulty": "easy",
-      "inspired_by": ["DABench"],
-      "question": "In the data_quality CSV, what fraction of rows have Churn equal to 1? Return a single number between 0 and 1.",
+      "id": "on_time_minus_late_review_gap",
+      "datasets": [
+        "olist_orders_2017",
+        "olist_order_reviews_2017"
+      ],
+      "category": "customer_experience",
+      "difficulty": "hard",
+      "language": "zh",
+      "source": "Olist Brazilian E-Commerce Public Dataset",
+      "question": "按订单先汇总评价分数，并按实际送达是否晚于预计送达分组。准时订单平均评分减去延迟订单平均评分等于多少？返回一个数字。",
       "expected_type": "number",
-      "expected_value": 0.333333,
-      "tolerance": 0.001
+      "expected_value": 1.7818283311931418,
+      "tolerance": 0.001,
+      "metric_definition": "mean(on-time order review) - mean(late order review)",
+      "failure_mode": "Reversing the subtraction or using unaggregated duplicate reviews."
     },
     {
-      "id": "score_at_least_80_count",
-      "datasets": ["data_quality"],
-      "category": "filter_aggregate",
-      "difficulty": "easy",
-      "inspired_by": ["DABench"],
-      "question": "In the data_quality CSV, how many rows have Score greater than or equal to 80? Return a single number.",
-      "expected_type": "number",
-      "expected_value": 3
-    },
-    {
-      "id": "diabetes_majority_baseline_accuracy",
-      "datasets": ["diabetes_toy"],
-      "category": "basic_ml_workflow",
-      "difficulty": "easy",
-      "inspired_by": ["DS-1000", "MLE-bench"],
-      "question": "Using the diabetes_toy CSV, compute the majority-class baseline accuracy for predicting Outcome. If there is a tie between classes, use either majority count divided by total rows. Return a single number between 0 and 1.",
-      "expected_type": "number",
-      "expected_value": 0.5,
-      "tolerance": 0.0001
-    },
-    {
-      "id": "glucose_threshold_classifier_accuracy",
-      "datasets": ["diabetes_toy"],
-      "category": "basic_ml_workflow",
+      "id": "missing_review_comment_rate",
+      "datasets": [
+        "olist_orders_2017",
+        "olist_order_reviews_2017"
+      ],
+      "category": "customer_experience",
       "difficulty": "medium",
-      "inspired_by": ["DS-1000", "MLE-bench"],
-      "question": "Using the diabetes_toy CSV, create a simple classifier that predicts Outcome=1 when Glucose is greater than or equal to 130, otherwise predicts 0. What is its accuracy on all rows? Return a single number between 0 and 1.",
+      "language": "en",
+      "source": "Olist Brazilian E-Commerce Public Dataset",
+      "question": "Among review rows linked to delivered orders, what fraction do not have a review comment? Use has_review_comment and return a number between 0 and 1.",
       "expected_type": "number",
-      "expected_value": 0.916667,
-      "tolerance": 0.001
+      "expected_value": 0.5859943201496156,
+      "tolerance": 0.0001,
+      "metric_definition": "1 - mean(has_review_comment) for delivered-order reviews",
+      "failure_mode": "Using missing review titles, or counting orders without any review row."
     },
     {
-      "id": "bmi_threshold_classifier_accuracy",
-      "datasets": ["diabetes_toy"],
-      "category": "basic_ml_workflow",
-      "difficulty": "medium",
-      "inspired_by": ["DS-1000", "MLE-bench"],
-      "question": "Using the diabetes_toy CSV, create a simple classifier that predicts Outcome=1 when BMI is greater than or equal to 30, otherwise predicts 0. What is its accuracy on all rows? Return a single number between 0 and 1.",
+      "id": "raw_join_payment_inflation_rate",
+      "datasets": [
+        "olist_orders_2017",
+        "olist_order_items_2017",
+        "olist_order_payments_2017"
+      ],
+      "category": "join_grain_integrity",
+      "difficulty": "hard",
+      "language": "zh",
+      "source": "Olist Brazilian E-Commerce Public Dataset",
+      "question": "仅对 delivered 订单：先计算支付表 payment_value 的正确总和；再将订单明细表与支付表直接按 order_id 做原始多对多连接并计算 payment_value 总和。原始连接结果相对正确结果的膨胀比例是多少？返回 (错误总和/正确总和)-1。",
       "expected_type": "number",
-      "expected_value": 0.75,
-      "tolerance": 0.001
+      "expected_value": 0.2765716718095028,
+      "tolerance": 0.0001,
+      "metric_definition": "naive joined payment sum / true payment sum - 1",
+      "failure_mode": "Failing to recognize the many-to-many fanout between item and payment rows."
     },
     {
-      "id": "glucose_outcome_correlation",
-      "datasets": ["diabetes_toy"],
-      "category": "basic_ml_workflow",
-      "difficulty": "medium",
-      "inspired_by": ["DS-1000", "MLE-bench"],
-      "question": "Using the diabetes_toy CSV, compute the Pearson correlation between Glucose and Outcome. Return a single number.",
+      "id": "raw_join_item_revenue_inflation_rate",
+      "datasets": [
+        "olist_orders_2017",
+        "olist_order_items_2017",
+        "olist_order_payments_2017"
+      ],
+      "category": "join_grain_integrity",
+      "difficulty": "hard",
+      "language": "en",
+      "source": "Olist Brazilian E-Commerce Public Dataset",
+      "question": "For delivered orders, compare the true sum of item price with the sum of price after raw-joining order items to payments on order_id. What is the inflation rate, defined as joined sum / true sum - 1? Return one number.",
       "expected_type": "number",
-      "expected_value": 0.640746,
-      "tolerance": 0.001
+      "expected_value": 0.056707728888556685,
+      "tolerance": 0.0001,
+      "metric_definition": "naive joined item-price sum / true item-price sum - 1",
+      "failure_mode": "Ignoring payment multiplicity when joining at raw row grain."
+    },
+    {
+      "id": "payment_vs_items_reconciliation_gap_rate",
+      "datasets": [
+        "olist_orders_2017",
+        "olist_order_items_2017",
+        "olist_order_payments_2017"
+      ],
+      "category": "join_grain_integrity",
+      "difficulty": "hard",
+      "language": "zh",
+      "source": "Olist Brazilian E-Commerce Public Dataset",
+      "question": "仅对 delivered 订单，分别在原表粒度计算支付总额 sum(payment_value) 与商品加运费总额 sum(price)+sum(freight_value)，不要先直接连接两张事实表。两者绝对差额占支付总额的比例是多少？返回 0 到 1 之间的数字。",
+      "expected_type": "number",
+      "expected_value": 0.00020630011176346865,
+      "tolerance": 0.0001,
+      "metric_definition": "abs(payment total - item price and freight total) / payment total",
+      "failure_mode": "Creating fanout by joining raw fact tables before aggregation."
     }
   ]
 }
