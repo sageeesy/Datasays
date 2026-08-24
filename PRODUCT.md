@@ -14,9 +14,10 @@ DataSays is an evidence-first data analysis Agent for operations and business us
 - Support Simplified Chinese and English UI, with Chinese as the default.
 - Prefer a single trustworthy answer over duplicated answer cards on the primary surface.
 - Keep metric definitions, code, assumptions, validation checks, and trace inspectable.
-- Do not imply real-time execution progress until backend events are streamed.
+- Use only bounded, dataset-scoped, validation-passing history as Agent context.
+- Show only backend-emitted LangGraph node progress; never simulate workflow advancement with a timer.
 - Do not expose a dashboard link when the result has no chartable structured data.
 
 ## Deferred Scope
 
-Benchmark dataset replacement, ecommerce metric research, multimodal inputs, vector RAG, LangGraph checkpoints, real-time events, structured Agent memory, MCP, and production sandbox hardening are separate later phases.
+Ecommerce metric research, multimodal inputs, vector RAG, checkpoint resume/approval controls, conversation report generation, external benchmark compatibility, MCP, and production sandbox hardening are separate later phases. The current Olist v1/v2 suites are local product evaluations, not proof of external benchmark performance.

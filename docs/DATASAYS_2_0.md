@@ -4,31 +4,32 @@
 
 DataSays is a metric-aware, evidence-first data analysis agent. Its purpose is not to support every possible data source or tool. It focuses on whether an answer follows an explicit business definition, can be reproduced from an execution artifact, and can be inspected when it fails.
 
-## Current P0 Workflow
+## Current P0/P1 Workflow
 
 1. Profile each uploaded CSV: types, semantic roles, missingness, cardinality, samples, ranges, and duplicate rate.
-2. Select a small analysis playbook from local versioned knowledge.
-3. Retrieve matching ecommerce or SaaS metric definitions and bind logical concepts to actual columns.
-4. Generate a typed `AnalysisPlan`.
-5. Generate Python that emits a typed `AnalysisResult` marker.
-6. Execute in the existing sandbox.
-7. Validate execution, required columns, metric grounding, result structure, and final-answer numeric faithfulness.
-8. Retry code generation with validation feedback within a bounded repair loop.
-9. Show the plan, definitions, artifact, checks, assumptions, and workflow trace in the UI.
+2. Load bounded recent dialogue and validated findings scoped to the current datasets.
+3. Select a small analysis playbook from local versioned knowledge.
+4. Retrieve matching ecommerce or SaaS metric definitions and bind logical concepts to actual columns.
+5. Generate a typed `AnalysisPlan`.
+6. Generate Python that emits a typed `AnalysisResult` marker.
+7. Execute in the existing sandbox.
+8. Validate execution, required columns, metric grounding, result structure, and final-answer numeric faithfulness.
+9. Retry code generation with validation feedback within a bounded repair loop.
+10. Show the plan, memory use, definitions, artifact, checks, assumptions, and workflow trace in the UI.
 
 ## Scope Boundary
 
 | Area | Current P0 | Later P1/P2 |
 |---|---|---|
-| Orchestration | Bounded typed service workflow | LangGraph persistence, checkpoints, streaming events |
+| Orchestration | LangGraph StateGraph, SQLite node checkpoints, conditional repair and live SSE progress | Resume/approval API, Postgres checkpoints, distributed workers |
 | Knowledge | Versioned JSON metric packs and deterministic retrieval | Embedding retrieval for larger knowledge collections |
-| Evaluation | 24-case executable benchmark plus service tests | Version comparisons, human review, LLM judge, LangSmith |
+| Evaluation | Olist v1 calculation regression plus v2.1.0 business-analysis suite, deterministic facts, multi-turn protocol, service tests and one complete Qwen3.6 Flash baseline | Additional model/repeated baselines, token and cost accounting, human review, semantic judge, external benchmark compatibility |
 | Data sources | CSV | Excel, SQL, dashboard images, PDFs |
 | Agents | One bounded analysis agent | No multi-agent system unless a real coordination need appears |
 
 ## Resume-Safe Claims
 
-The repository currently demonstrates planning, local Skill selection, metric retrieval, tool-like service calls, sandbox execution, validation, bounded repair, trace metadata, and persisted analysis artifacts. It does not yet implement LangGraph, durable graph checkpoints, real-time SSE events, semantic conversation memory, vector retrieval, MCP, or production SaaS isolation. Those capabilities should only be claimed after their acceptance criteria are implemented and tested.
+The repository currently demonstrates LangGraph planning and routing, local Skill selection, metric retrieval, dataset-scoped conversation memory, sandbox execution, deterministic validation, bounded repair, durable local checkpoints, real-time SSE node events, trace metadata, and persisted analysis artifacts. It does not yet implement checkpoint resume/approval controls, semantic/vector memory, MCP, or production SaaS isolation. Those capabilities should only be claimed after their acceptance criteria are implemented and tested.
 
 ## Multimodal Roadmap
 

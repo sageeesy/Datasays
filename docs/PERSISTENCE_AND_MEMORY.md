@@ -39,18 +39,47 @@ GET    /api/conversations/{id}/runs?verified_only=true
 is persisted before analysis begins; the assistant response and analysis run are
 persisted when execution finishes.
 
-## Next memory layer
+`POST /api/query/stream` accepts the same payload and returns Server-Sent Events.
+It emits public node progress first and the same stable response envelope as the
+final `result` event.
 
-Persistence is not the same as model context. A later iteration should build a
-bounded context packet from the saved data:
+## Agent checkpoints
 
-1. The most recent 3-5 message pairs.
-2. A rolling conversation summary.
-3. Verified findings extracted only from successful analysis runs.
-4. Confirmed metric definitions, assumptions, filters, and unresolved questions.
+LangGraph state is stored separately from product conversation data:
+
+```text
+server/data/agent-checkpoints.db
+```
+
+Set `DATASAYS_CHECKPOINT_PATH` to override this location. Each analysis run uses
+a unique `graph_thread_id`, and a checkpoint is written after each graph step.
+The response metadata records the thread ID, backend type, and checkpoint count.
+The current API does not yet expose pause/resume, replay, or approval controls;
+the checkpoints provide the durable foundation for those capabilities.
+
+## Current bounded memory layer
+
+Persistence is not the same as model context. DataSays now builds a bounded
+context packet from saved data for each follow-up:
+
+1. At most eight recent messages, excluding the active user message.
+2. At most five findings extracted from successful, validation-passing runs.
+3. Only findings associated with the current dataset names.
+4. Source run IDs so memory use remains auditable.
 
 Failed or low-confidence runs remain auditable in history but must not become
 trusted Agent memory.
+
+The planner and code generator receive this packet with explicit instructions
+to recompute requested values from current files. The packet is bounded by a
+character limit and does not contain full prior datasets.
+
+## Next memory upgrades
+
+- Rolling conversation summaries for long threads.
+- Explicit user confirmation of business definitions and assumptions.
+- Resume and approval endpoints backed by existing LangGraph checkpoints.
+- Semantic retrieval only after the stored knowledge volume justifies it.
 
 ## Report generation
 
