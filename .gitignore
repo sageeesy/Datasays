@@ -30,6 +30,8 @@ server/.env.*
 server/uploads/*
 !server/uploads/.gitkeep
 server/data/
+/data/agent-checkpoints.db*
+/data/datasays.db*
 server/venv/
 server/evals/results/
 

@@ -18,6 +18,7 @@ router = APIRouter()
 class QueryRequest(BaseModel):
     question: str
     fileIds: List[str]
+    project_id: Optional[str] = None
     model: Optional[str] = None
     prompt_style: Optional[str] = "zero"  # zero, zero_cot, sub_question
     mode: Literal["agent"] = "agent"
@@ -128,6 +129,7 @@ async def process_query(request: QueryRequest):
             prepared["prompt_style"],
             prepared["model"],
             conversation_context=prepared["conversation_context"],
+            project_id=request.project_id,
         )
         response = _response_envelope(sandbox_response)
         _persist_response(request, prepared, response)
@@ -159,6 +161,7 @@ async def stream_query(request: QueryRequest, http_request: Request):
                 prepared["prompt_style"],
                 prepared["model"],
                 conversation_context=prepared["conversation_context"],
+                project_id=request.project_id,
             ):
                 if await http_request.is_disconnected():
                     return

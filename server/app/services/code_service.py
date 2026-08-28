@@ -6,6 +6,8 @@ import os
 import re
 import json
 import ast
+import io
+import tokenize
 import tempfile
 import shutil
 from pathlib import Path
@@ -146,6 +148,38 @@ def _is_valid_python(candidate: str) -> bool:
         return False
 
 
+def _normalize_json_literals_in_python(candidate: str) -> str:
+    """Convert bare JSON literals without changing strings or comments."""
+    replacements = {
+        "null": "None",
+        "true": "True",
+        "false": "False",
+    }
+    tokens = []
+    for token in tokenize.generate_tokens(io.StringIO(candidate).readline):
+        if token.type == tokenize.NAME and token.string in replacements:
+            token = tokenize.TokenInfo(
+                token.type,
+                replacements[token.string],
+                token.start,
+                token.end,
+                token.line,
+            )
+        tokens.append(token)
+    normalized = tokenize.untokenize(tokens)
+    ast.parse(normalized)
+    return normalized
+
+
+def _prepare_python_candidate(candidate: str) -> str:
+    if not candidate.strip():
+        return ""
+    try:
+        return _normalize_json_literals_in_python(candidate)
+    except (SyntaxError, IndentationError, tokenize.TokenError):
+        return ""
+
+
 def _message_text(message: Dict[str, Any]) -> str:
     """Normalize OpenAI-compatible string or content-block responses."""
     content = message.get("content")
@@ -173,8 +207,8 @@ def _extract_code_and_reasoning(full_response: str) -> Dict[str, str]:
     try:
         payload = json.loads(response)
         if isinstance(payload, dict) and isinstance(payload.get("code"), str):
-            candidate = payload["code"].strip()
-            if _is_valid_python(candidate):
+            candidate = _prepare_python_candidate(payload["code"].strip())
+            if candidate:
                 return {
                     "code": candidate,
                     "thinking_process": str(payload.get("reasoning_summary", "")).strip(),
@@ -188,8 +222,8 @@ def _extract_code_and_reasoning(full_response: str) -> Dict[str, str]:
         flags=re.IGNORECASE,
     ))
     for match in fenced_matches:
-        candidate = match.group(1).strip()
-        if _is_valid_python(candidate):
+        candidate = _prepare_python_candidate(match.group(1).strip())
+        if candidate:
             summary = "\n\n".join(
                 part for part in (response[:match.start()].strip(), response[match.end():].strip())
                 if part
@@ -198,15 +232,16 @@ def _extract_code_and_reasoning(full_response: str) -> Dict[str, str]:
 
     # Never execute hidden thinking blocks as Python.
     visible = re.sub(r"<think>[\s\S]*?</think>", "", response, flags=re.IGNORECASE).strip()
-    if _is_valid_python(visible):
-        return {"code": visible, "thinking_process": ""}
+    prepared_visible = _prepare_python_candidate(visible)
+    if prepared_visible:
+        return {"code": prepared_visible, "thinking_process": ""}
 
     # Handle a short explanation followed by unfenced code.
     lines = visible.splitlines()
     for index, line in enumerate(lines):
         if re.match(r"^\s*(?:from\s+\S+\s+import|import\s+\S+|def\s+\w+|class\s+\w+)", line):
-            candidate = "\n".join(lines[index:]).strip()
-            if _is_valid_python(candidate):
+            candidate = _prepare_python_candidate("\n".join(lines[index:]).strip())
+            if candidate:
                 return {
                     "code": candidate,
                     "thinking_process": "\n".join(lines[:index]).strip(),
@@ -468,16 +503,22 @@ def _build_code_generation_prompt(
     prompt += "7. For statistical calculations (mean, median, sum, etc.), preserve the exact computed value\n"
     prompt += "8. ALWAYS finish by printing one structured result line in this exact format:\n"
     prompt += "   print('__DATASAYS_RESULT__' + json.dumps(result, ensure_ascii=False, default=str))\n"
-    prompt += "9. The result dictionary MUST contain: answer_type, primary_value, unit, summary, rows, columns_used, metric_id, assumptions, insights, datasets, visualizations\n"
+    prompt += "9. The result dictionary MUST contain: answer_type, primary_value, unit, summary, rows, columns_used, metric_id, assumptions, insights, datasets, visualizations, evidence\n"
     prompt += "10. answer_type must be number, table, or text. rows must be a list of JSON objects. columns_used must contain exact CSV column names\n"
-    prompt += "11. Import json. primary_value must be a Python int, float, str, bool, or null. For table answers set primary_value to null and put every record in rows\n\n"
-    prompt += "12. metric_id MUST be one of plan.metric_ids from the grounded context. If plan.metric_ids is empty, metric_id MUST be null\n\n"
-    prompt += "13. datasets is a list of {id, name, rows}; each id uses only letters, numbers, underscores, or hyphens. Each dataset contains at most 500 rows and all datasets together contain at most 2000 rows\n"
-    prompt += "14. visualizations uses only: bar, line, pie, scatter, histogram, box, heatmap, table. Each item includes title and dataset_id\n"
-    prompt += "15. bar/line/pie/scatter/histogram require x and y. heatmap requires x, y, value. box requires x, lower, q1, median, q3, upper. Referenced fields must exist in that dataset\n"
-    prompt += "16. Compute histogram bins, box-plot five-number summaries, correlations, model coefficients, feature importance, and curve points in Python; return those values as rows instead of plotting them\n"
-    prompt += "17. insights contains at most 5 concise evidence-grounded findings. Do not claim causality from correlation\n\n"
-    prompt += "18. Write summary, insights, dataset names, visualization titles/descriptions, and user-facing row labels in the same language as the user's question\n\n"
+    prompt += "11. Import json. This is Python code: use Python literals None, True, and False, never JSON literals null, true, or false. primary_value must be a Python int, float, str, bool, or None. For table answers set primary_value to None and put every record in rows\n\n"
+    prompt += "12. metric_id MUST be one of plan.metric_ids from the grounded context. If plan.metric_ids is empty, metric_id MUST be None\n\n"
+    prompt += "13. evidence is the machine-readable Plan-to-Result contract. For EVERY item in plan.metrics, return at least one evidence item whose plan_metric_key exactly equals that planned metric's key. Do not invent another business identity or infer additional required facts from the original user question\n"
+    prompt += "14. Each evidence item has exactly: plan_metric_key, kind, value, value_scale, unit, dataset_id, value_field, dimension_fields, coordinates, label. Do not add an evidence key. plan_metric_key may be None only when plan.metrics is empty\n"
+    prompt += "15. Use these exact Python shapes (never empty strings): scalar evidence sets dataset_id=None, value_field=None, dimension_fields=[]; dataset evidence sets value=None and uses a real dataset_id. Build dataset row dictionaries before evidence. For each dataset evidence, the set {value_field, *dimension_fields} MUST be a subset of the exact keys in those row dictionaries. COPY those keys character-for-character; never translate, abbreviate, alias, or invent them\n"
+    prompt += "   Scalar example: {'plan_metric_key': plan_key, 'kind': 'scalar', 'value': computed_value, 'value_scale': 'raw', 'unit': None, 'dataset_id': None, 'value_field': None, 'dimension_fields': [], 'coordinates': {}, 'label': label}\n"
+    prompt += "   Dataset example: {'plan_metric_key': plan_key, 'kind': 'dataset', 'value': None, 'value_scale': 'raw', 'unit': None, 'dataset_id': dataset['id'], 'value_field': exact_value_key_from_dataset_rows, 'dimension_fields': exact_dimension_keys_from_dataset_rows, 'coordinates': {}, 'label': label}\n"
+    prompt += "16. A planned metric may have both overall scalar evidence and grouped/time-series dataset evidence using the same plan_metric_key. For planned rate/share/ratio metrics, every numeric evidence item MUST copy the plan's value_scale. Planned facts must not exist only in summary or insights\n"
+    prompt += "17. datasets is a list of {id, name, rows}; each id uses only letters, numbers, underscores, or hyphens. Each dataset contains at most 500 rows and all datasets together contain at most 2000 rows\n"
+    prompt += "18. visualizations uses only: bar, line, pie, scatter, histogram, box, heatmap, table. Each item includes title and dataset_id\n"
+    prompt += "19. bar/line/pie/scatter/histogram require x and y. heatmap requires x, y, value. box requires x, lower, q1, median, q3, upper. Referenced fields must exist in that dataset\n"
+    prompt += "20. Compute histogram bins, box-plot five-number summaries, correlations, model coefficients, feature importance, and curve points in Python; return those values as rows instead of plotting them\n"
+    prompt += "21. insights contains at most 5 concise evidence-grounded findings. Do not claim causality from correlation\n\n"
+    prompt += "22. Write summary, insights, evidence labels, dataset names, visualization titles/descriptions, and user-facing row labels in the same language as the user's question\n\n"
     
     prompt += "## Important Notes:\n"
     if file_headers:
@@ -542,13 +583,14 @@ def _build_code_repair_prompt(
     prompt += "1. Return complete executable Python code only inside a markdown code block.\n"
     prompt += "2. Use pandas to read the CSV file with the exact relative filename shown above.\n"
     prompt += "3. Do not use absolute paths, network access, external files, shell commands, or interactive input.\n"
-    prompt += "4. Preserve the user's analytical intent; fix only what is needed to make the code run and answer correctly.\n"
+    prompt += "4. Preserve the user's analytical intent; fix only what is needed to make the code run and answer correctly. If the error is an AnalysisResult/Evidence validation error, do not rewrite calculations, filters, joins, date handling, or metric logic; repair only result, datasets, visualizations, or evidence construction.\n"
     prompt += "5. Put table records in result['rows']; do not print DataFrames, Series, or HTML tables.\n"
     prompt += "6. Remove all plotting and image code, including matplotlib, seaborn, plotly, PIL, and graphviz. Return chart-ready structured datasets and visualization specs even when the user explicitly asks for charts or a dashboard.\n\n"
-    prompt += "7. ALWAYS emit a final __DATASAYS_RESULT__ JSON line with answer_type, primary_value, unit, summary, rows, columns_used, metric_id, assumptions, insights, datasets, and visualizations. For table answers, primary_value must be null.\n"
+    prompt += "7. ALWAYS emit a final __DATASAYS_RESULT__ JSON line with answer_type, primary_value, unit, summary, rows, columns_used, metric_id, assumptions, insights, datasets, visualizations, and evidence. This is Python code: use None, True, and False, never null, true, or false. For table answers, primary_value must be None.\n"
     prompt += "8. Use only metric IDs, columns, and definitions supplied in the grounded context.\n\n"
-    prompt += "9. If the plan has no metric_ids, set result metric_id to null.\n\n"
+    prompt += "9. If the plan has no metric_ids, set result metric_id to None.\n\n"
     prompt += "10. Write the short repair summary in the same language as the user's question.\n\n"
     prompt += "11. Visualization types are restricted to bar, line, pie, scatter, histogram, box, heatmap, and table. Use the original result contract's required fields for each type.\n\n"
+    prompt += "12. Preserve the Plan-to-Result evidence contract: every plan.metrics key needs at least one scalar or dataset evidence item with the exact plan_metric_key. Scalar evidence MUST use dataset_id=None, value_field=None, and dimension_fields=[] (never empty strings). Dataset evidence MUST use value=None. For every dataset evidence, {value_field, *dimension_fields} MUST be a subset of the exact keys in the referenced result['datasets'] row dictionaries. On a missing-field validation error, copy the actual emitted row key character-for-character or rename the row key and every reference consistently; never guess a new field. Rate/share/ratio evidence must declare value_scale. Do not infer extra required facts from the user question.\n\n"
     prompt += "Generate the repaired code now:"
     return prompt

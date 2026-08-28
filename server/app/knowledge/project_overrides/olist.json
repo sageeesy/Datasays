@@ -4,32 +4,53 @@
   "concept_bindings": {
     "paid_amount": ["payment_value"]
   },
+  "canonical_metric_mappings": {
+    "ecommerce.gmv": "ecommerce.payment_gmv"
+  },
   "policies": {
     "valid_completed_order": "An order is completed when order_status equals delivered.",
     "default_business_time": "Use the purchase/order event as the default reporting time unless the user explicitly requests another business event.",
     "order_level_payment_aggregation": "For order-level payment metrics, aggregate payment rows by order_id before joining them to order-level data."
   },
+  "policy_contracts": {
+    "valid_completed_order": {
+      "filters": [
+        {
+          "concept": "order_status",
+          "operator": "eq",
+          "value": "delivered"
+        }
+      ]
+    }
+  },
   "metric_overrides": {
     "ecommerce.payment_gmv": {
       "time_concept": "order_time",
-      "default_population": "Orders satisfying the Olist valid_completed_order policy."
+      "default_population": "Orders satisfying the Olist valid_completed_order policy.",
+      "population_policies": ["valid_completed_order"],
+      "pre_aggregation_policies": ["order_level_payment_aggregation"]
     },
     "ecommerce.aov": {
       "time_concept": "order_time",
       "default_population": "Orders satisfying the Olist valid_completed_order policy.",
-      "denominator_policy": "Count distinct completed order_id values in the same population as the payment amount numerator; preserve completed orders until the denominator is calculated."
+      "denominator_policy": "Count distinct completed order_id values in the same population as the payment amount numerator; preserve completed orders until the denominator is calculated.",
+      "population_policies": ["valid_completed_order"],
+      "pre_aggregation_policies": ["order_level_payment_aggregation"]
     },
     "ecommerce.delivery_rate": {
       "time_concept": "order_time",
-      "denominator_policy": "Count all distinct orders in the analysis period before applying completed-status filters or payment joins."
+      "denominator_policy": "Count all distinct orders in the analysis period before applying completed-status filters or payment joins.",
+      "numerator_population_policies": ["valid_completed_order"]
     },
     "ecommerce.payment_method_amount_share": {
       "time_concept": "order_time",
-      "default_population": "Payment rows belonging to orders satisfying the Olist valid_completed_order policy."
+      "default_population": "Payment rows belonging to orders satisfying the Olist valid_completed_order policy.",
+      "population_policies": ["valid_completed_order"]
     },
     "ecommerce.multi_payment_order_rate": {
       "time_concept": "order_time",
-      "default_population": "Orders with payment rows that also satisfy the Olist valid_completed_order policy."
+      "default_population": "Orders with payment rows that also satisfy the Olist valid_completed_order policy.",
+      "population_policies": ["valid_completed_order"]
     }
   }
 }

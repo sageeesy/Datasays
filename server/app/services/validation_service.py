@@ -36,6 +36,7 @@ def validate_execution_artifact(
     available_columns: List[str],
     metric_matches: List[Dict[str, Any]],
     visualization_required: bool = False,
+    dataset_columns: Optional[Dict[str, List[str]]] = None,
 ) -> ValidationReport:
     checks: List[ValidationCheck] = []
     status = execution_result.get("status")
@@ -46,7 +47,19 @@ def validate_execution_artifact(
     ))
 
     available_lookup = {column.lower(): column for column in available_columns}
-    missing_columns = [column for column in plan.required_columns if column.lower() not in available_lookup]
+    dataset_lookup = {
+        dataset.lower(): {column.lower() for column in columns}
+        for dataset, columns in (dataset_columns or {}).items()
+    }
+
+    def column_exists(reference: str) -> bool:
+        if "." not in reference:
+            return reference.lower() in available_lookup
+        dataset, column = reference.rsplit(".", 1)
+        columns = dataset_lookup.get(dataset.lower())
+        return columns is not None and column.lower() in columns
+
+    missing_columns = [column for column in plan.required_columns if not column_exists(column)]
     checks.append(ValidationCheck(
         name="required_columns",
         status="pass" if not missing_columns else "fail",
@@ -133,6 +146,47 @@ def validate_execution_artifact(
                 "The requested dashboard is backed by structured datasets and approved visualization specifications."
                 if visualization_valid
                 else "The user requested visualization, but the result did not include structured datasets and visualization specifications."
+            ),
+        ))
+
+        planned_metrics = {metric.key: metric for metric in plan.metrics}
+        referenced_plan_keys = {
+            evidence.plan_metric_key
+            for evidence in result.evidence
+            if evidence.plan_metric_key
+        }
+        missing_evidence = sorted(set(planned_metrics) - referenced_plan_keys)
+        unknown_evidence = sorted(referenced_plan_keys - set(planned_metrics))
+        unbound_evidence = bool(planned_metrics) and any(
+            evidence.plan_metric_key is None for evidence in result.evidence
+        )
+        missing_value_scales = sorted({
+            evidence.plan_metric_key
+            for evidence in result.evidence
+            if evidence.plan_metric_key in planned_metrics
+            and planned_metrics[evidence.plan_metric_key].metric_type in {"rate", "share", "ratio"}
+            and evidence.value_scale is None
+        })
+
+        evidence_issues: List[str] = []
+        if missing_evidence:
+            evidence_issues.append("missing planned metrics: " + ", ".join(missing_evidence))
+        if unknown_evidence:
+            evidence_issues.append("unknown plan metric keys: " + ", ".join(unknown_evidence))
+        if unbound_evidence:
+            evidence_issues.append("unbound evidence is not allowed when planned metrics exist")
+        if missing_value_scales:
+            evidence_issues.append(
+                "rate/share/ratio evidence missing value_scale: " + ", ".join(missing_value_scales)
+            )
+
+        checks.append(ValidationCheck(
+            name="result_evidence_coverage",
+            status="warning" if evidence_issues else "pass",
+            message=(
+                "Every planned metric has valid machine-readable result evidence."
+                if not evidence_issues
+                else "Result evidence coverage is incomplete: " + "; ".join(evidence_issues)
             ),
         ))
 

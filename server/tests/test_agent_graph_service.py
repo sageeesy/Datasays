@@ -2,9 +2,9 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
-from app.schemas.analysis import AnalysisPlan, PlannedMetric, ValidationReport
+from app.schemas.analysis import AnalysisPlan, PlanGenerationOutcome, PlannedMetric, ValidationReport
 from app.services import agent_service
 
 
@@ -80,6 +80,8 @@ class AgentGraphServiceTest(unittest.IsolatedAsyncioTestCase):
         }
         passed = ValidationReport(passed=True, confidence="high", checks=[])
 
+        retrieve_metrics = Mock(return_value=[])
+
         with tempfile.TemporaryDirectory() as directory, patch.dict(
             os.environ,
             {"DATASAYS_CHECKPOINT_PATH": str(Path(directory) / "checkpoints.db")},
@@ -90,12 +92,12 @@ class AgentGraphServiceTest(unittest.IsolatedAsyncioTestCase):
         ), patch.object(
             agent_service, "compact_skill", side_effect=lambda skill: skill
         ), patch.object(
-            agent_service, "retrieve_metric_definitions", return_value=[]
+            agent_service, "retrieve_metric_definitions", retrieve_metrics
         ), patch.object(
             agent_service,
             "generate_analysis_plan",
-            AsyncMock(return_value=(
-                AnalysisPlan(
+            AsyncMock(return_value=PlanGenerationOutcome(
+                plan=AnalysisPlan(
                     intent="aggregation",
                     analysis_scope="All rows in demo.csv",
                     entity_grain="One row per group value",
@@ -109,7 +111,7 @@ class AgentGraphServiceTest(unittest.IsolatedAsyncioTestCase):
                     )],
                     steps=["Group rows", "Calculate the mean"],
                 ),
-                {"planner": "test"},
+                metadata={"planner": "test"},
             )),
         ), patch.object(
             agent_service,
@@ -137,6 +139,7 @@ class AgentGraphServiceTest(unittest.IsolatedAsyncioTestCase):
                     "What is the mean by group?",
                     ["file-1"],
                     graph_thread_id="test-run",
+                    project_id="olist",
                 )
             ]
 
@@ -151,8 +154,14 @@ class AgentGraphServiceTest(unittest.IsolatedAsyncioTestCase):
             self.assertIn("validate_result", completed_nodes)
             self.assertEqual(events[-1]["type"], "result")
             self.assertEqual(events[-1]["data"]["metadata"]["agent_framework"], "langgraph_stategraph")
+            self.assertEqual(events[-1]["data"]["metadata"]["project_id"], "olist")
             self.assertGreater(events[-1]["data"]["metadata"]["checkpoint_count"], 1)
             self.assertTrue((Path(directory) / "checkpoints.db").exists())
+            retrieve_metrics.assert_called_once_with(
+                "What is the mean by group?",
+                profiles,
+                project_id="olist",
+            )
 
     async def test_incomplete_plan_stops_before_code_generation(self) -> None:
         profile_headers = [{
@@ -183,10 +192,13 @@ class AgentGraphServiceTest(unittest.IsolatedAsyncioTestCase):
         ), patch.object(
             agent_service,
             "generate_analysis_plan",
-            AsyncMock(return_value=(AnalysisPlan(intent="aggregation"), {
-                "planner": "llm_structured_output_incomplete",
-                "attempt_count": 2,
-            })),
+            AsyncMock(return_value=PlanGenerationOutcome(
+                plan=AnalysisPlan(intent="aggregation"),
+                metadata={
+                    "planner": "llm_structured_output_incomplete",
+                    "attempt_count": 2,
+                },
+            )),
         ), patch.object(
             agent_service, "generate_code", generate_code
         ):

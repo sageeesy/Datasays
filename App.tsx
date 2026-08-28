@@ -319,6 +319,7 @@ export default function App() {
         const response = await sendQueryStream({
           question: message,
           fileIds: fileIds,
+          project_id: new URLSearchParams(window.location.search).get("project_id") || undefined,
           model,
           prompt_style: promptStyle || "zero",
           mode: "agent",

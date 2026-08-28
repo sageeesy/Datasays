@@ -43,6 +43,7 @@ export interface UploadFileResponse {
 export interface QueryRequest {
   question: string;
   fileIds: string[];
+  project_id?: string;
   model?: string;
   prompt_style?: string; // zero, zero_cot, sub_question (optional, defaults to "zero")
   mode?: 'agent';

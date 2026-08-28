@@ -1,5 +1,6 @@
 """Typed contracts shared by planning, execution, validation, and the UI."""
 
+import math
 from typing import Any, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field, model_validator
@@ -11,10 +12,12 @@ class PlanFilter(BaseModel):
     operator: Literal[
         "eq",
         "ne",
+        "gt",
         "in",
         "not_in",
         "between",
         "gte",
+        "lt",
         "lte",
         "is_null",
         "not_null",
@@ -114,6 +117,31 @@ class PlanCompletenessReport(BaseModel):
     issues: List[PlanCompletenessIssue] = Field(default_factory=list)
 
 
+class PlanNormalizationAction(BaseModel):
+    code: str
+    field: str
+    before: Any = None
+    after: Any = None
+
+
+class PlanNormalizationResult(BaseModel):
+    normalized_payload: Dict[str, Any] = Field(default_factory=dict)
+    actions: List[PlanNormalizationAction] = Field(default_factory=list)
+    unresolved_issues: List[PlanCompletenessIssue] = Field(default_factory=list)
+
+
+class PlanGenerationOutcome(BaseModel):
+    """Planner result that preserves partial semantics when no canonical plan exists."""
+
+    plan: Optional[AnalysisPlan] = None
+    raw_payload: Optional[Dict[str, Any]] = None
+    normalized_partial_payload: Dict[str, Any] = Field(default_factory=dict)
+    normalization_actions: List[PlanNormalizationAction] = Field(default_factory=list)
+    validation_errors: List[Dict[str, Any]] = Field(default_factory=list)
+    unresolved_issues: List[PlanCompletenessIssue] = Field(default_factory=list)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
 ScalarValue = Union[float, int, str, bool]
 
 
@@ -149,6 +177,39 @@ class VisualizationSpec(BaseModel):
         return self
 
 
+class ResultEvidence(BaseModel):
+    """Machine-readable evidence tied to a planned metric when one exists."""
+
+    plan_metric_key: Optional[str] = Field(default=None, min_length=1)
+    kind: Literal["scalar", "dataset"]
+    value: Optional[ScalarValue] = None
+    value_scale: Optional[Literal["raw", "fraction", "percent"]] = None
+    unit: Optional[str] = None
+    dataset_id: Optional[str] = Field(default=None, min_length=1)
+    value_field: Optional[str] = Field(default=None, min_length=1)
+    dimension_fields: List[str] = Field(default_factory=list)
+    coordinates: Dict[str, ScalarValue] = Field(default_factory=dict)
+    label: Optional[str] = None
+
+    @model_validator(mode="after")
+    def validate_evidence_shape(self) -> "ResultEvidence":
+        if isinstance(self.value, (int, float)) and not isinstance(self.value, bool):
+            if not math.isfinite(float(self.value)):
+                raise ValueError("evidence scalar value must be finite")
+
+        if self.kind == "scalar":
+            if self.value is None:
+                raise ValueError("scalar evidence requires value")
+            if self.dataset_id or self.value_field or self.dimension_fields:
+                raise ValueError("scalar evidence cannot declare dataset fields")
+        else:
+            if self.value is not None:
+                raise ValueError("dataset evidence value must be null")
+            if not self.dataset_id or not self.value_field:
+                raise ValueError("dataset evidence requires dataset_id and value_field")
+        return self
+
+
 class AnalysisResult(BaseModel):
     answer_type: Literal["number", "table", "text"]
     primary_value: Optional[ScalarValue] = None
@@ -161,6 +222,7 @@ class AnalysisResult(BaseModel):
     insights: List[str] = Field(default_factory=list, max_length=8)
     datasets: List[VisualizationDataset] = Field(default_factory=list, max_length=12)
     visualizations: List[VisualizationSpec] = Field(default_factory=list, max_length=12)
+    evidence: List[ResultEvidence] = Field(default_factory=list)
 
     @model_validator(mode="before")
     @classmethod
@@ -172,12 +234,31 @@ class AnalysisResult(BaseModel):
         payload = dict(value)
         datasets = [dict(item) for item in payload.get("datasets", []) if isinstance(item, dict)]
         visuals = [dict(item) for item in payload.get("visualizations", []) if isinstance(item, dict)]
+        evidence_items: List[Dict[str, Any]] = []
+        for raw_item in payload.get("evidence", []):
+            if not isinstance(raw_item, dict):
+                continue
+            item = dict(raw_item)
+            for field in ("plan_metric_key", "value_scale", "unit", "dataset_id", "value_field", "label"):
+                if item.get(field) == "":
+                    item[field] = None
+            if item.get("kind") == "scalar":
+                item["dataset_id"] = None
+                item["value_field"] = None
+                item["dimension_fields"] = []
+            evidence_items.append(item)
+        payload["evidence"] = evidence_items
 
         # Models sometimes emit every intermediate distribution as a dataset even
         # though only a few are visualized. Keep the referenced evidence when the
         # bounded transport contract would otherwise be exceeded.
         if len(datasets) > 12 and visuals:
             referenced = {item.get("dataset_id") for item in visuals}
+            referenced.update(
+                item.get("dataset_id")
+                for item in evidence_items
+                if isinstance(item, dict) and item.get("kind") == "dataset"
+            )
             datasets = [item for item in datasets if item.get("id") in referenced]
 
         rows_by_id = {
@@ -246,6 +327,20 @@ class AnalysisResult(BaseModel):
             if missing_fields:
                 raise ValueError(
                     f"visualization '{visual.title}' references missing fields: {', '.join(missing_fields)}"
+                )
+
+        for evidence in self.evidence:
+            if evidence.kind != "dataset":
+                continue
+            dataset = datasets.get(evidence.dataset_id)
+            if dataset is None:
+                raise ValueError(f"evidence references unknown dataset: {evidence.dataset_id}")
+            available_fields = {key for row in dataset.rows for key in row}
+            referenced_fields = {evidence.value_field, *evidence.dimension_fields}
+            missing_fields = sorted(field for field in referenced_fields if field not in available_fields)
+            if missing_fields:
+                raise ValueError(
+                    "evidence references missing dataset fields: " + ", ".join(missing_fields)
                 )
         return self
 

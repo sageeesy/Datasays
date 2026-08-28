@@ -55,12 +55,26 @@ def _tokens(value: str) -> set[str]:
     return set(re.findall(r"[a-z0-9]+|[\u4e00-\u9fff]+", value.lower()))
 
 
+def _matches_direct_term(question: str, candidate: str) -> bool:
+    """Match explicit metric terms without manufacturing cross-word acronyms."""
+    if not candidate.strip():
+        return False
+    if re.search(r"[\u4e00-\u9fff]", candidate):
+        normalized_candidate = _normalize(candidate)
+        return bool(normalized_candidate and normalized_candidate in _normalize(question))
+
+    words = re.findall(r"[a-z0-9]+", candidate.lower())
+    if not words:
+        return False
+    phrase = r"[\W_]+".join(re.escape(word) for word in words)
+    return re.search(rf"(?<![a-z0-9]){phrase}(?![a-z0-9])", question.lower()) is not None
+
+
 def _direct_match_terms(question: str, metric: MetricDefinition) -> List[str]:
-    normalized_question = _normalize(question)
     return sorted({
         candidate
         for candidate in [metric.name, metric.id, *metric.aliases]
-        if _normalize(candidate) and _normalize(candidate) in normalized_question
+        if _matches_direct_term(question, candidate)
     })
 
 
@@ -170,6 +184,7 @@ def bind_metric_fields(
 def _metric_knowledge_context(
     metric: MetricDefinition,
     project_override: Optional[Dict[str, Any]],
+    canonical_metric_mapping: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
     metric_override = (project_override or {}).get("metric_overrides", {}).get(metric.id, {})
     effective = {
@@ -182,6 +197,7 @@ def _metric_knowledge_context(
         "project_id": (project_override or {}).get("project_id"),
         "project_policies": (project_override or {}).get("policies", {}),
         "applied_metric_override": metric_override,
+        "canonical_metric_mapping": canonical_metric_mapping,
         "effective": effective,
     }
 
@@ -200,6 +216,22 @@ def retrieve_metric_definitions(
         metric.id: _direct_match_terms(question, metric)
         for metric in definitions
     }
+    definition_ids = {metric.id for metric in definitions}
+    configured_canonical_mappings = (project_override or {}).get(
+        "canonical_metric_mappings",
+        {},
+    )
+    active_canonical_mappings = {
+        source_id: target_id
+        for source_id, target_id in configured_canonical_mappings.items()
+        if source_id in definition_ids
+        and target_id in definition_ids
+        and direct_terms_by_metric.get(source_id)
+    }
+    canonical_sources_by_target = {
+        target_id: source_id
+        for source_id, target_id in active_canonical_mappings.items()
+    }
 
     for metric in definitions:
         score = 0.0
@@ -212,15 +244,55 @@ def retrieve_metric_definitions(
             if overlap:
                 score += float(len(overlap))
 
+        canonical_source_id = canonical_sources_by_target.get(metric.id)
+        canonical_target_id = active_canonical_mappings.get(metric.id)
+        if score <= 0 and canonical_source_id:
+            # Explicit project identity, rather than retrieval score, makes the
+            # canonical target available for the Planner decision.
+            score = 1.0
         if score <= 0:
             continue
-        knowledge_context = _metric_knowledge_context(metric, project_override)
+        canonical_metric_mapping = None
+        if canonical_source_id:
+            canonical_metric_mapping = {
+                "role": "canonical_target",
+                "source_metric_id": canonical_source_id,
+                "target_metric_id": metric.id,
+                "source": "project_override",
+            }
+        elif canonical_target_id:
+            canonical_metric_mapping = {
+                "role": "mapped_source",
+                "source_metric_id": metric.id,
+                "target_metric_id": canonical_target_id,
+                "source": "project_override",
+            }
+        knowledge_context = _metric_knowledge_context(
+            metric,
+            project_override,
+            canonical_metric_mapping=canonical_metric_mapping,
+        )
         bindings, missing, time_field_candidates = bind_metric_fields(
             metric,
             profiles,
             project_override=project_override,
             time_concept=knowledge_context["effective"]["time_concept"],
         )
+        metric_override = knowledge_context.get("applied_metric_override", {})
+        policy_ids = {
+            *metric_override.get("population_policies", []),
+            *metric_override.get("numerator_population_policies", []),
+            *metric_override.get("denominator_population_policies", []),
+        }
+        available = _all_profile_columns(profiles)
+        policy_contracts = (project_override or {}).get("policy_contracts", {})
+        for policy_id in policy_ids:
+            for item in policy_contracts.get(policy_id, {}).get("filters", []):
+                concept = str(item.get("concept", ""))
+                if concept and concept not in bindings:
+                    policy_bindings = _bind_concept(concept, available, project_override)
+                    if policy_bindings:
+                        bindings[concept] = policy_bindings
         coverage = (len(metric.required_concepts) - len(missing)) / max(len(metric.required_concepts), 1)
         score += coverage * 2.0
         match_type = "exact" if matched_terms else "token_overlap"
@@ -229,12 +301,17 @@ def retrieve_metric_definitions(
             matched_terms,
             direct_terms_by_metric,
         )
+        if canonical_target_id:
+            shadowed_by = canonical_target_id
         matches.append(MetricMatch(
             metric=metric,
             score=round(score, 3),
             matched_terms=sorted(set(matched_terms)),
             match_type=match_type,
-            decision_required=match_type == "exact" and shadowed_by is None,
+            decision_required=(
+                canonical_source_id is not None
+                or (match_type == "exact" and shadowed_by is None)
+            ),
             shadowed_by=shadowed_by,
             field_bindings=bindings,
             missing_concepts=missing,
@@ -279,4 +356,192 @@ def compact_metric_match(match: MetricMatch) -> Dict[str, Any]:
         "missing_concepts": match.missing_concepts,
         "knowledge_context": match.knowledge_context,
         "retrieval_score": match.score,
+    }
+
+
+def _resolved_field(item: Dict[str, str]) -> Dict[str, str]:
+    return {
+        "dataset": item["file_name"],
+        "column": item["column"],
+        "binding_source": item.get("binding_source", "domain_alias"),
+    }
+
+
+def _resolve_policy_filters(
+    policy_ids: List[str],
+    project_override: Optional[Dict[str, Any]],
+    available: List[Dict[str, str]],
+) -> tuple[List[Dict[str, Any]], List[str]]:
+    filters: List[Dict[str, Any]] = []
+    unresolved: List[str] = []
+    policy_contracts = (project_override or {}).get("policy_contracts", {})
+    for policy_id in policy_ids:
+        policy = policy_contracts.get(policy_id)
+        if not policy:
+            unresolved.append(f"Project policy contract '{policy_id}' is not defined.")
+            continue
+        for item in policy.get("filters", []):
+            concept = str(item.get("concept", ""))
+            bindings = _bind_concept(concept, available, project_override)
+            if len(bindings) != 1:
+                unresolved.append(
+                    f"Policy '{policy_id}' requires one unambiguous binding for "
+                    f"'{concept}', found {len(bindings)}."
+                )
+                continue
+            filters.append({
+                "dataset": bindings[0]["file_name"],
+                "column": bindings[0]["column"],
+                "operator": item.get("operator"),
+                "value": item.get("value"),
+            })
+    return filters, unresolved
+
+
+def _formula_operands(formula: str) -> tuple[str, Optional[str]]:
+    numerator, separator, denominator = formula.partition("/")
+    return numerator.strip(), denominator.strip() if separator else None
+
+
+def resolve_metric_contract(match: MetricMatch) -> Dict[str, Any]:
+    """Compile one metric match into the sole effective semantic view for Planner."""
+    metric = match.metric
+    context = match.knowledge_context
+    effective = context.get("effective", {})
+    metric_override = context.get("applied_metric_override", {})
+    project_id = context.get("project_id")
+    project_override = load_project_override(project_id) if project_id else None
+    available = _all_profile_columns_from_bindings(match)
+
+    population_policy_ids = list(metric_override.get("population_policies", []))
+    numerator_policy_ids = list(metric_override.get("numerator_population_policies", []))
+    denominator_policy_ids = list(metric_override.get("denominator_population_policies", []))
+    population_filters, population_issues = _resolve_policy_filters(
+        population_policy_ids,
+        project_override,
+        available,
+    )
+    numerator_filters, numerator_issues = _resolve_policy_filters(
+        numerator_policy_ids,
+        project_override,
+        available,
+    )
+    denominator_filters, denominator_issues = _resolve_policy_filters(
+        denominator_policy_ids,
+        project_override,
+        available,
+    )
+    if not numerator_policy_ids:
+        numerator_filters = list(population_filters)
+    if not denominator_policy_ids:
+        denominator_filters = list(population_filters)
+
+    unresolved = [
+        *(f"Required concept '{concept}' is not bound." for concept in match.missing_concepts),
+        *population_issues,
+        *numerator_issues,
+        *denominator_issues,
+    ]
+    time_concept = effective.get("time_concept", metric.time_concept)
+    resolved_time_field = None
+    if time_concept:
+        if len(match.time_field_candidates) == 1:
+            resolved_time_field = _resolved_field(match.time_field_candidates[0])
+        else:
+            unresolved.append(
+                f"Time concept '{time_concept}' has {len(match.time_field_candidates)} candidate bindings."
+            )
+
+    policy_descriptions = (project_override or {}).get("policies", {})
+    pre_aggregation_policy_ids = list(metric_override.get("pre_aggregation_policies", []))
+    pre_aggregation_requirements = []
+    for policy_id in pre_aggregation_policy_ids:
+        description = policy_descriptions.get(policy_id)
+        if description:
+            pre_aggregation_requirements.append(description)
+        else:
+            unresolved.append(f"Pre-aggregation policy '{policy_id}' is not defined.")
+
+    numerator_formula, denominator_formula = _formula_operands(metric.formula)
+    source_by_semantic = {
+        "formula": "domain_metric_definition",
+        "population": (
+            "project_override" if "default_population" in metric_override else "domain_metric_definition"
+        ) if effective.get("default_population", metric.default_population) else None,
+        "denominator": (
+            "project_override" if "denominator_policy" in metric_override else "domain_metric_definition"
+        ) if effective.get("denominator_policy", metric.denominator_policy) else None,
+        "time": (
+            "project_override" if "time_concept" in metric_override else "domain_metric_definition"
+        ) if time_concept else None,
+        "pre_aggregation": "project_override" if pre_aggregation_policy_ids else None,
+    }
+    return {
+        "metric_id": metric.id,
+        "label": metric.name,
+        "formula": metric.formula,
+        "entity": metric.entity,
+        "grain": metric.grain,
+        "resolved_population": {
+            "description": effective.get("default_population", metric.default_population),
+            "filters": population_filters,
+        },
+        "resolved_numerator": {
+            "calculation_semantics": numerator_formula,
+            "filters": numerator_filters,
+        },
+        "resolved_denominator": (
+            {
+                "calculation_semantics": denominator_formula,
+                "policy": effective.get("denominator_policy", metric.denominator_policy),
+                "filters": denominator_filters,
+            }
+            if denominator_formula or effective.get("denominator_policy", metric.denominator_policy)
+            else None
+        ),
+        "time_concept": time_concept,
+        "resolved_time_field": resolved_time_field,
+        "required_bindings": {
+            concept: [_resolved_field(item) for item in bindings]
+            for concept, bindings in match.field_bindings.items()
+        },
+        "pre_aggregation_requirements": pre_aggregation_requirements,
+        "allowed_dimensions": metric.allowed_dimensions,
+        "caveats": metric.caveats,
+        "resolution_status": "unresolved" if unresolved else "resolved",
+        "unresolved_requirements": unresolved,
+        "provenance": {
+            "project_id": project_id,
+            "canonical_metric_mapping": context.get("canonical_metric_mapping"),
+            "source_by_semantic": source_by_semantic,
+            "population_policy_ids": population_policy_ids,
+            "numerator_population_policy_ids": numerator_policy_ids,
+            "denominator_population_policy_ids": denominator_policy_ids,
+            "pre_aggregation_policy_ids": pre_aggregation_policy_ids,
+        },
+    }
+
+
+def _all_profile_columns_from_bindings(match: MetricMatch) -> List[Dict[str, str]]:
+    unique: Dict[tuple[str, str], Dict[str, str]] = {}
+    for bindings in match.field_bindings.values():
+        for item in bindings:
+            unique[(item["file_name"], item["column"])] = {
+                "file_name": item["file_name"],
+                "column": item["column"],
+            }
+    return list(unique.values())
+
+
+def resolved_metric_candidate(match: MetricMatch) -> Dict[str, Any]:
+    """Return resolved semantics plus only the candidate metadata Planner needs."""
+    contract = resolve_metric_contract(match)
+    return {
+        "id": contract["metric_id"],
+        **contract,
+        "decision_required": match.decision_required,
+        "shadowed_by": match.shadowed_by,
+        "match_type": match.match_type,
+        "matched_terms": match.matched_terms,
+        "missing_concepts": match.missing_concepts,
     }

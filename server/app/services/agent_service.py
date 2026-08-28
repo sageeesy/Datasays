@@ -11,11 +11,15 @@ from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.graph import END, START, StateGraph
 from typing_extensions import TypedDict
 
-from app.schemas.analysis import AnalysisPlan, ValidationReport
+from app.schemas.analysis import AnalysisPlan, PlanCompletenessReport, ValidationReport
 from app.services.code_service import contains_image_generation, generate_code, repair_code
 from app.services.file_service import load_metadata, save_metadata
 from app.services.llm_service import polish_sandbox_output
-from app.services.metric_service import compact_metric_match, retrieve_metric_definitions
+from app.services.metric_service import (
+    compact_metric_match,
+    resolved_metric_candidate,
+    retrieve_metric_definitions,
+)
 from app.services.memory_service import summarize_conversation_context
 from app.services.plan_service import evaluate_plan_completeness, generate_analysis_plan
 from app.services.profile_service import build_dataset_profile, compact_profile
@@ -50,6 +54,7 @@ class AgentState(TypedDict, total=False):
     selected_skills: List[Dict[str, Any]]
     compact_skills: List[Dict[str, Any]]
     metric_matches: List[Dict[str, Any]]
+    resolved_metric_candidates: List[Dict[str, Any]]
     plan: Dict[str, Any]
     planner_metadata: Dict[str, Any]
     analysis_context: Dict[str, Any]
@@ -169,6 +174,7 @@ def _workflow_metadata(state: AgentState) -> Dict[str, Any]:
         "graph_thread_id": state["graph_thread_id"],
         "checkpoint_backend": "sqlite",
         "checkpoint_scope": "one_thread_per_analysis_run",
+        "project_id": state.get("project_id"),
         "agent_steps": state.get("steps", []),
         "dataset_profiles": state.get("profiles", []),
         "selected_skills": [
@@ -182,6 +188,7 @@ def _workflow_metadata(state: AgentState) -> Dict[str, Any]:
             for skill in selected_skills
         ],
         "retrieved_metrics": state.get("metric_matches", []),
+        "resolved_metric_candidates": state.get("resolved_metric_candidates", []),
         "retrieval_method": "alias_keyword_with_schema_binding",
         "plan": state.get("plan", {}),
         "planner": state.get("planner_metadata", {}),
@@ -243,6 +250,7 @@ async def _retrieve_metrics(state: AgentState) -> Dict[str, Any]:
         project_id=state.get("project_id"),
     )
     matches = [compact_metric_match(match) for match in retrieved]
+    resolved_candidates = [resolved_metric_candidate(match) for match in retrieved]
     _record_step(
         steps, "retrieve_metrics", "retrieve_metric_definition",
         "Retrieve business definitions and bind their logical fields to the uploaded schema.",
@@ -255,25 +263,58 @@ async def _retrieve_metrics(state: AgentState) -> Dict[str, Any]:
         },
         round((time.perf_counter() - started) * 1000),
     )
-    return {"steps": steps, "metric_matches": matches}
+    return {
+        "steps": steps,
+        "metric_matches": matches,
+        "resolved_metric_candidates": resolved_candidates,
+    }
 
 
 async def _plan_analysis(state: AgentState) -> Dict[str, Any]:
     steps = list(state["steps"])
     started = time.perf_counter()
-    plan, planner_metadata = await generate_analysis_plan(
+    outcome = await generate_analysis_plan(
         question=state["question"],
         profiles=state["profiles"],
-        metric_matches=state["metric_matches"],
+        metric_matches=state["resolved_metric_candidates"],
         skills=state["compact_skills"],
         model=state.get("model"),
         conversation_context=state.get("conversation_context"),
     )
-    plan_data = plan.model_dump(mode="json")
-    completeness = evaluate_plan_completeness(plan, state["profiles"], state["metric_matches"])
+    plan = outcome.plan
+    planner_metadata = outcome.metadata
+    plan_data = (
+        plan.model_dump(mode="json")
+        if plan is not None
+        else outcome.normalized_partial_payload
+    )
+    if plan is not None:
+        completeness = evaluate_plan_completeness(
+            plan,
+            state["profiles"],
+            state["resolved_metric_candidates"],
+        )
+    else:
+        completeness = PlanCompletenessReport.model_validate(
+            planner_metadata.get("completeness") or {
+                "schema_valid": False,
+                "ready_for_code_generation": False,
+                "valid_clarification": False,
+                "issues": [],
+            }
+        )
     planner_metadata = {
         **planner_metadata,
         "completeness": completeness.model_dump(mode="json"),
+        "canonical_plan_present": plan is not None,
+        "normalized_partial_payload": outcome.normalized_partial_payload,
+        "normalization_actions": [
+            item.model_dump(mode="json") for item in outcome.normalization_actions
+        ],
+        "validation_errors": outcome.validation_errors,
+        "unresolved_issues": [
+            item.model_dump(mode="json") for item in outcome.unresolved_issues
+        ],
     }
     incomplete = not completeness.ready_for_code_generation and not completeness.valid_clarification
     _record_step(
@@ -450,6 +491,7 @@ async def _validate_result(state: AgentState) -> Dict[str, Any]:
         available_columns,
         state["metric_matches"],
         visualization_required=_visualization_requested(state["question"]),
+        dataset_columns={item["fileName"]: item["headers"] for item in state["file_headers"]},
     )
     attempts.append({
         "attempt": attempt,
@@ -792,6 +834,7 @@ async def run_data_analysis_agent(
     prompt_style: str = "zero",
     model: str | None = None,
     conversation_context: Optional[Dict[str, Any]] = None,
+    project_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Compatibility wrapper for non-streaming callers."""
     result: Optional[Dict[str, Any]] = None
@@ -801,6 +844,7 @@ async def run_data_analysis_agent(
         prompt_style,
         model,
         conversation_context=conversation_context,
+        project_id=project_id,
     ):
         if event.get("type") == "result":
             result = event["data"]

@@ -2,6 +2,7 @@
 
 import json
 import re
+from copy import deepcopy
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -12,6 +13,9 @@ from app.schemas.analysis import (
     AnalysisPlan,
     PlanCompletenessIssue,
     PlanCompletenessReport,
+    PlanGenerationOutcome,
+    PlanNormalizationAction,
+    PlanNormalizationResult,
 )
 from app.services.code_service import (
     OPENROUTER_BASE_URL,
@@ -66,12 +70,23 @@ def _apply_planning_guards(
 ) -> tuple[AnalysisPlan, Dict[str, Any]]:
     """Force clarification when requested evidence cannot exist in the supplied schema."""
     blockers: List[str] = []
+    selected_metric_ids = {
+        metric.metric_id
+        for metric in plan.metrics
+        if metric.metric_id
+    }
+    rejected_metric_ids = {item.metric_id for item in plan.rejected_metrics}
     for match in metric_matches:
+        metric_id = str(match.get("id") or "")
         missing = match.get("missing_concepts") or []
-        if missing and match.get("matched_terms"):
+        if (
+            missing
+            and metric_id in selected_metric_ids
+            and metric_id not in rejected_metric_ids
+        ):
             metric_name = METRIC_LABELS.get(
-                str(match.get("id")),
-                str(match.get("name") or match.get("id")),
+                metric_id,
+                str(match.get("name") or metric_id),
             )
             missing_names = "、".join(CONCEPT_LABELS.get(item, item) for item in missing)
             blockers.append(f"{metric_name}缺少必要字段：{missing_names}")
@@ -152,8 +167,471 @@ def _datasets_for_column(reference: str, catalog: Dict[str, set[str]]) -> set[st
     return {name for name, columns in catalog.items() if column in columns}
 
 
+def _plan_filters(plan: AnalysisPlan) -> List[Any]:
+    filters: List[Any] = list(plan.filters)
+    for metric in plan.metrics:
+        filters.extend(metric.filters)
+        if metric.numerator:
+            filters.extend(metric.numerator.filters)
+        if metric.denominator:
+            filters.extend(metric.denominator.filters)
+    return filters
+
+
+def infer_plan_dataset_usage(
+    plan: AnalysisPlan,
+    profiles: List[Dict[str, Any]],
+    metric_matches: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Infer dataset usage only from explicit or uniquely resolvable evidence."""
+    catalog = _dataset_catalog(profiles)
+    used_datasets: set[str] = set()
+    evidence: List[Dict[str, Any]] = []
+    unqualified: List[Dict[str, Any]] = []
+    unresolved_rmc_bindings: List[Dict[str, Any]] = []
+
+    def add_dataset(dataset: str, source: str, field: str) -> None:
+        normalized = _dataset_key(dataset)
+        if normalized in catalog:
+            used_datasets.add(normalized)
+            evidence.append({
+                "dataset": normalized,
+                "source": source,
+                "field": field,
+            })
+
+    for item in _plan_filters(plan):
+        add_dataset(item.dataset, "filter.dataset", f"{item.dataset}.{item.column}")
+
+    for index, join in enumerate(plan.joins):
+        add_dataset(join.left_dataset, "join.left_dataset", f"joins.{index}")
+        add_dataset(join.right_dataset, "join.right_dataset", f"joins.{index}")
+
+    references: List[tuple[str, str]] = [
+        *(("required_columns", reference) for reference in plan.required_columns),
+        *(("dimensions", reference) for reference in plan.dimensions),
+    ]
+    if plan.time_field:
+        references.append(("time_field", plan.time_field))
+
+    pending_unqualified: List[tuple[str, str, set[str]]] = []
+    for source, reference in references:
+        dataset, _ = _column_reference_parts(reference)
+        matches = _datasets_for_column(reference, catalog)
+        if dataset:
+            for matched in matches:
+                used_datasets.add(matched)
+                evidence.append({
+                    "dataset": matched,
+                    "source": f"qualified_{source}",
+                    "field": reference,
+                })
+        elif len(matches) == 1:
+            matched = next(iter(matches))
+            used_datasets.add(matched)
+            evidence.append({
+                "dataset": matched,
+                "source": f"unique_{source}",
+                "field": reference,
+            })
+            unqualified.append({
+                "field": reference,
+                "source": source,
+                "matches": sorted(matches),
+                "resolution": matched,
+                "reason": "unique_profile_match",
+            })
+        else:
+            pending_unqualified.append((source, reference, matches))
+
+    selected_metric_ids = {metric.metric_id for metric in plan.metrics if metric.metric_id}
+    for match in metric_matches:
+        metric_id = str(match.get("metric_id") or match.get("id") or "")
+        if not metric_id or metric_id not in selected_metric_ids:
+            continue
+        for concept, bindings in (match.get("required_bindings") or match.get("field_bindings") or {}).items():
+            valid_bindings = [
+                binding
+                for binding in bindings
+                if isinstance(binding, dict)
+                and _dataset_key(binding.get("dataset", "")) in catalog
+                and binding.get("column")
+            ]
+            binding_datasets = {_dataset_key(binding["dataset"]) for binding in valid_bindings}
+            if len(valid_bindings) == 1:
+                binding = valid_bindings[0]
+                add_dataset(
+                    binding["dataset"],
+                    "selected_rmc_unique_binding",
+                    f"{metric_id}.{concept}",
+                )
+            elif len(binding_datasets.intersection(used_datasets)) == 1:
+                matched = next(iter(binding_datasets.intersection(used_datasets)))
+                evidence.append({
+                    "dataset": matched,
+                    "source": "selected_rmc_explicit_dataset_binding",
+                    "field": f"{metric_id}.{concept}",
+                })
+            elif len(valid_bindings) > 1:
+                unresolved_rmc_bindings.append({
+                    "metric_id": metric_id,
+                    "concept": concept,
+                    "candidate_datasets": sorted(binding_datasets),
+                })
+
+    for source, reference, matches in pending_unqualified:
+        explicit_matches = matches.intersection(used_datasets)
+        resolution = next(iter(explicit_matches)) if len(explicit_matches) == 1 else None
+        if resolution:
+            evidence.append({
+                "dataset": resolution,
+                "source": f"context_resolved_{source}",
+                "field": reference,
+            })
+        unqualified.append({
+            "field": reference,
+            "source": source,
+            "matches": sorted(matches),
+            "resolution": resolution,
+            "reason": (
+                "single_explicit_dataset_match"
+                if resolution
+                else "ambiguous_no_dataset_expansion"
+            ),
+        })
+
+    return {
+        "used_datasets": sorted(used_datasets),
+        "evidence": evidence,
+        "unqualified_references": unqualified,
+        "unresolved_rmc_bindings": unresolved_rmc_bindings,
+    }
+
+
 def _issue(code: str, field: str, message: str) -> PlanCompletenessIssue:
     return PlanCompletenessIssue(code=code, field=field, message=message)
+
+
+_FILTER_OPERATOR_ALIASES = {
+    "==": "eq",
+    "!=": "ne",
+    ">": "gt",
+    ">=": "gte",
+    "<": "lt",
+    "<=": "lte",
+}
+_EXPLICIT_OPERATION = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*\s*\(.+\)$")
+
+
+def _field_path(parts: List[Any]) -> str:
+    return ".".join(str(part) for part in parts)
+
+
+def _dedupe_list(values: List[Any]) -> List[Any]:
+    result: List[Any] = []
+    seen: set[str] = set()
+    for value in values:
+        marker = json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
+        if marker not in seen:
+            seen.add(marker)
+            result.append(value)
+    return result
+
+
+def _validation_errors(error: ValidationError) -> List[Dict[str, Any]]:
+    return json.loads(json.dumps(error.errors(include_url=False), ensure_ascii=False, default=str))
+
+
+def _candidate_by_metric_id(metric_matches: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    return {
+        str(match.get("metric_id") or match.get("id")): match
+        for match in metric_matches
+        if match.get("metric_id") or match.get("id")
+    }
+
+
+def _structured_operation(candidate: Dict[str, Any], operand_name: str) -> Optional[str]:
+    operand = candidate.get(f"resolved_{operand_name}")
+    if not isinstance(operand, dict):
+        return None
+    operation = operand.get("calculation_semantics")
+    if not isinstance(operation, str):
+        return None
+    operation = operation.strip()
+    return operation if _EXPLICIT_OPERATION.fullmatch(operation) else None
+
+
+def normalize_plan_payload(
+    raw_payload: Dict[str, Any],
+    metric_matches: List[Dict[str, Any]],
+    profiles: Optional[List[Dict[str, Any]]] = None,
+) -> PlanNormalizationResult:
+    """Canonicalize only representations whose meaning is already explicit."""
+    payload = deepcopy(raw_payload)
+    actions: List[PlanNormalizationAction] = []
+    unresolved: List[PlanCompletenessIssue] = []
+
+    def normalize_empty(value: Any, path: List[Any]) -> Any:
+        if isinstance(value, str) and not value.strip():
+            actions.append(PlanNormalizationAction(
+                code="empty_string_to_null",
+                field=_field_path(path),
+                before=value,
+                after=None,
+            ))
+            return None
+        if isinstance(value, list):
+            return [normalize_empty(item, [*path, index]) for index, item in enumerate(value)]
+        if isinstance(value, dict):
+            return {key: normalize_empty(item, [*path, key]) for key, item in value.items()}
+        return value
+
+    payload = normalize_empty(payload, [])
+
+    for list_field in ("metric_ids", "required_columns", "dimensions", "steps", "assumptions"):
+        values = payload.get(list_field)
+        if isinstance(values, list):
+            deduped = _dedupe_list(values)
+            if deduped != values:
+                actions.append(PlanNormalizationAction(
+                    code="deduplicate_list",
+                    field=list_field,
+                    before=values,
+                    after=deduped,
+                ))
+                payload[list_field] = deduped
+
+    joins = payload.get("joins")
+    if isinstance(joins, list):
+        for index, join in enumerate(joins):
+            if isinstance(join, dict) and isinstance(join.get("join_keys"), list):
+                original = join["join_keys"]
+                deduped = _dedupe_list(original)
+                if deduped != original:
+                    actions.append(PlanNormalizationAction(
+                        code="deduplicate_list",
+                        field=f"joins.{index}.join_keys",
+                        before=original,
+                        after=deduped,
+                    ))
+                    join["join_keys"] = deduped
+
+    def normalize_filters(filters: Any, path: str) -> None:
+        if not isinstance(filters, list):
+            return
+        for index, item in enumerate(filters):
+            if not isinstance(item, dict):
+                continue
+            operator = item.get("operator")
+            canonical = _FILTER_OPERATOR_ALIASES.get(operator)
+            if canonical:
+                item["operator"] = canonical
+                actions.append(PlanNormalizationAction(
+                    code="canonicalize_filter_operator",
+                    field=f"{path}.{index}.operator",
+                    before=operator,
+                    after=canonical,
+                ))
+
+    normalize_filters(payload.get("filters"), "filters")
+    metrics = payload.get("metrics")
+    if isinstance(metrics, list):
+        for metric_index, metric in enumerate(metrics):
+            if not isinstance(metric, dict):
+                continue
+            normalize_filters(metric.get("filters"), f"metrics.{metric_index}.filters")
+            for operand_name in ("numerator", "denominator"):
+                operand = metric.get(operand_name)
+                if isinstance(operand, dict):
+                    normalize_filters(
+                        operand.get("filters"),
+                        f"metrics.{metric_index}.{operand_name}.filters",
+                    )
+
+    selected_ids = []
+    if isinstance(metrics, list):
+        selected_ids = [
+            metric.get("metric_id")
+            for metric in metrics
+            if isinstance(metric, dict) and metric.get("metric_id")
+        ]
+    rebuilt_ids = _dedupe_list(selected_ids)
+    if payload.get("metric_ids") != rebuilt_ids:
+        actions.append(PlanNormalizationAction(
+            code="rebuild_metric_ids",
+            field="metric_ids",
+            before=payload.get("metric_ids"),
+            after=rebuilt_ids,
+        ))
+        payload["metric_ids"] = rebuilt_ids
+
+    if payload.get("aggregation") is not None:
+        actions.append(PlanNormalizationAction(
+            code="clear_legacy_aggregation",
+            field="aggregation",
+            before=payload.get("aggregation"),
+            after=None,
+        ))
+    payload["aggregation"] = None
+
+    candidates = _candidate_by_metric_id(metric_matches)
+    if isinstance(metrics, list):
+        for metric_index, metric in enumerate(metrics):
+            if not isinstance(metric, dict):
+                continue
+            candidate = candidates.get(str(metric.get("metric_id"))) if metric.get("metric_id") else None
+            for operand_name in ("numerator", "denominator"):
+                operand = metric.get(operand_name)
+                if not isinstance(operand, dict) or operand.get("aggregation") is not None:
+                    continue
+                field = f"metrics.{metric_index}.{operand_name}.aggregation"
+                operation = _structured_operation(candidate or {}, operand_name)
+                if operation:
+                    operand["aggregation"] = operation
+                    actions.append(PlanNormalizationAction(
+                        code="fill_operand_aggregation_from_resolved_metric",
+                        field=field,
+                        before=None,
+                        after=operation,
+                    ))
+                else:
+                    unresolved.append(_issue(
+                        "unresolved_operand_aggregation",
+                        field,
+                        "Operand aggregation is missing and cannot be uniquely resolved from the selected metric contract.",
+                    ))
+
+    required_columns = payload.get("required_columns")
+    if not isinstance(required_columns, list):
+        required_columns = []
+    derived_columns: List[str] = []
+
+    def collect_filter_columns(filters: Any) -> None:
+        if not isinstance(filters, list):
+            return
+        for item in filters:
+            if isinstance(item, dict) and item.get("dataset") and item.get("column"):
+                derived_columns.append(f"{item['dataset']}.{item['column']}")
+
+    collect_filter_columns(payload.get("filters"))
+    if isinstance(metrics, list):
+        for metric in metrics:
+            if not isinstance(metric, dict):
+                continue
+            collect_filter_columns(metric.get("filters"))
+            for operand_name in ("numerator", "denominator"):
+                operand = metric.get(operand_name)
+                if isinstance(operand, dict):
+                    collect_filter_columns(operand.get("filters"))
+    if isinstance(payload.get("dimensions"), list):
+        derived_columns.extend(item for item in payload["dimensions"] if isinstance(item, str))
+    if isinstance(payload.get("time_field"), str):
+        derived_columns.append(payload["time_field"])
+    if isinstance(joins, list):
+        for join in joins:
+            if not isinstance(join, dict):
+                continue
+            for key in join.get("join_keys") or []:
+                if join.get("left_dataset"):
+                    derived_columns.append(f"{join['left_dataset']}.{key}")
+                if join.get("right_dataset"):
+                    derived_columns.append(f"{join['right_dataset']}.{key}")
+    catalog = _dataset_catalog(profiles or [])
+    explicit_datasets: set[str] = set()
+
+    def collect_explicit_filter_datasets(filters: Any) -> None:
+        if not isinstance(filters, list):
+            return
+        for item in filters:
+            if isinstance(item, dict) and item.get("dataset"):
+                dataset = _dataset_key(item["dataset"])
+                if not catalog or dataset in catalog:
+                    explicit_datasets.add(dataset)
+
+    collect_explicit_filter_datasets(payload.get("filters"))
+    if isinstance(metrics, list):
+        for metric in metrics:
+            if not isinstance(metric, dict):
+                continue
+            collect_explicit_filter_datasets(metric.get("filters"))
+            for operand_name in ("numerator", "denominator"):
+                operand = metric.get(operand_name)
+                if isinstance(operand, dict):
+                    collect_explicit_filter_datasets(operand.get("filters"))
+    if isinstance(joins, list):
+        for join in joins:
+            if not isinstance(join, dict):
+                continue
+            for side in ("left_dataset", "right_dataset"):
+                if join.get(side):
+                    dataset = _dataset_key(join[side])
+                    if not catalog or dataset in catalog:
+                        explicit_datasets.add(dataset)
+    for reference in [
+        *(item for item in required_columns if isinstance(item, str)),
+        *(item for item in payload.get("dimensions", []) if isinstance(item, str)),
+        *([payload["time_field"]] if isinstance(payload.get("time_field"), str) else []),
+    ]:
+        dataset, _ = _column_reference_parts(reference)
+        if dataset:
+            normalized_dataset = _dataset_key(dataset)
+            if not catalog or normalized_dataset in catalog:
+                explicit_datasets.add(normalized_dataset)
+        elif catalog:
+            matches = _datasets_for_column(reference, catalog)
+            if len(matches) == 1:
+                explicit_datasets.update(matches)
+
+    for metric_id in rebuilt_ids:
+        candidate = candidates.get(str(metric_id), {})
+        for bindings in (candidate.get("required_bindings") or {}).values():
+            if not isinstance(bindings, list):
+                continue
+            valid_bindings = [
+                binding
+                for binding in bindings
+                if isinstance(binding, dict)
+                and binding.get("dataset")
+                and binding.get("column")
+                and (not catalog or _dataset_key(binding["dataset"]) in catalog)
+            ]
+            selected_bindings = valid_bindings
+            if len(valid_bindings) > 1:
+                selected_bindings = [
+                    binding
+                    for binding in valid_bindings
+                    if _dataset_key(binding["dataset"]) in explicit_datasets
+                ]
+            if len(selected_bindings) == 1:
+                binding = selected_bindings[0]
+                derived_columns.append(f"{binding['dataset']}.{binding['column']}")
+
+    normalized_columns = _dedupe_list([*required_columns, *derived_columns])
+    if normalized_columns != required_columns:
+        actions.append(PlanNormalizationAction(
+            code="derive_required_columns",
+            field="required_columns",
+            before=required_columns,
+            after=normalized_columns,
+        ))
+        payload["required_columns"] = normalized_columns
+
+    return PlanNormalizationResult(
+        normalized_payload=payload,
+        actions=actions,
+        unresolved_issues=unresolved,
+    )
+
+
+def _planner_response_schema() -> Dict[str, Any]:
+    """Allow raw nullable operands while keeping the canonical plan strict."""
+    schema = deepcopy(AnalysisPlan.model_json_schema())
+    aggregation = schema["$defs"]["MetricOperand"]["properties"]["aggregation"]
+    schema["$defs"]["MetricOperand"]["properties"]["aggregation"] = {
+        "anyOf": [aggregation, {"type": "null"}],
+        "title": aggregation.get("title", "Aggregation"),
+    }
+    return schema
 
 
 def evaluate_plan_completeness(
@@ -199,13 +677,7 @@ def evaluate_plan_completeness(
     if plan.time_field and not _column_exists(plan.time_field, catalog):
         issues.append(_issue("unknown_time_field", "time_field", f"Time field '{plan.time_field}' is not present in the dataset profiles."))
 
-    all_filters = list(plan.filters)
-    for metric in plan.metrics:
-        all_filters.extend(metric.filters)
-        if metric.numerator:
-            all_filters.extend(metric.numerator.filters)
-        if metric.denominator:
-            all_filters.extend(metric.denominator.filters)
+    all_filters = _plan_filters(plan)
     for item in all_filters:
         columns = _resolve_dataset(item.dataset, catalog)
         if columns is None:
@@ -289,13 +761,8 @@ def evaluate_plan_completeness(
     elif bool(plan.time_field) != bool(plan.time_grain):
         issues.append(_issue("incomplete_time_spec", "time_field", "time_field and time_grain must be provided together."))
 
-    used_datasets: set[str] = set()
-    for reference in [*plan.required_columns, *plan.dimensions, *([plan.time_field] if plan.time_field else [])]:
-        used_datasets.update(_datasets_for_column(reference, catalog))
-    for item in all_filters:
-        normalized = _dataset_key(item.dataset)
-        if normalized in catalog:
-            used_datasets.add(normalized)
+    dataset_usage = infer_plan_dataset_usage(plan, profiles, metric_matches)
+    used_datasets = set(dataset_usage["used_datasets"])
 
     join_edges: set[frozenset[str]] = set()
     for join in plan.joins:
@@ -350,7 +817,8 @@ def _fallback_plan(
     required_columns = []
     assumptions = ["The planner used a deterministic fallback because structured planning was unavailable."]
     for match in metric_matches[:2]:
-        for bindings in match.get("field_bindings", {}).values():
+        bindings_by_concept = match.get("required_bindings") or match.get("field_bindings", {})
+        for bindings in bindings_by_concept.values():
             required_columns.extend(item["column"] for item in bindings)
 
     selected = skills[0]["id"] if skills else "aggregation_ranking"
@@ -416,6 +884,15 @@ UNIVERSAL PLANNING SEMANTICS
 - U6 Business-Event Time: select time_field from the business event requested by the user, such as purchase, payment, or delivery. Do not select a date merely because it exists or is more complete.
 - U7 Overall/Trend Consistency: overall metrics and their time trends must use the same metric definitions, populations, and filters. A trend adds only the time grouping.
 
+SELECTED-METRIC GROUNDING CONTRACT
+- When a retrieved candidate is selected as metrics[].metric_id, its effective semantics are the default business contract for that planned metric, not optional reference context.
+- Apply this precedence: explicit user requirement > effective project metric semantics > domain metric defaults > clarification. The candidate's effective fields already incorporate any applicable project override; do not fall back to conflicting domain defaults when an effective value is present.
+- Population inheritance: materialize effective default_population in the selected metric's definition, calculation, metric-specific filters, numerator or denominator filters, and ordered steps as applicable. A broader top-level analysis_scope must not erase a narrower metric-specific population.
+- Denominator inheritance: materialize effective denominator_policy in the denominator entity, aggregation, filters, baseline-preservation steps, and join/filter order as applicable.
+- Time inheritance: when effective time_concept has a resolved time_field_candidate, use that bound raw column as time_field unless the user explicitly requests a different business event.
+- Deviate from effective semantics only when the user explicitly overrides them or the supplied data cannot satisfy them. If the data cannot satisfy a material selected-metric contract, request clarification instead of silently substituting another population, denominator, or time event.
+- When several metrics require a broader shared base population, keep that base in analysis_scope while preserving each selected metric's own effective population and denominator inside its metric and operands.
+
 Rules:
 - intent is required. Choose the closest supported intent; there is no generic 'other' escape hatch.
 - For an executable plan, analysis_scope must define the included population and entity_grain must define one analytical row/entity.
@@ -425,6 +902,9 @@ Rules:
 - A rate, share, or ratio metric must explicitly describe its numerator and denominator, including their different filters or grains.
 - value_scale is raw for counts/currency, fraction for values such as 0.25, and percent only when the stored value itself is 25 rather than 0.25.
 - metric_ids must exactly equal all non-null metrics[].metric_id values. A non-null metric_id must come from RETRIEVED BUSINESS METRICS.
+- When a planned metric has the same underlying formula, entity, and grain as a retrieved candidate, but adds query-specific filters, subgroup conditions, or a narrower population, treat it as an instance of that candidate and set the corresponding metric_id.
+- Do not use metric_id=null merely because the query asks for a narrower subset.
+- Only reject a candidate when the planned metric materially differs in formula, entity, grain, or business meaning.
 - RETRIEVED BUSINESS METRICS are candidates, not automatically mandatory outputs. Only candidates with decision_required=true require an explicit decision.
 - For every decision_required=true candidate, either select it through metrics[].metric_id and metric_ids, reject it in rejected_metrics with a concise reason, or request clarification when the business meaning is genuinely unresolved.
 - Candidates with decision_required=false, including token-overlap and shadowed candidates, do not require rejection and may be omitted without explanation.
@@ -441,6 +921,9 @@ Rules:
 - metric_type must be one of: count, sum, average, rate, share, ratio, difference, other.
 - value_scale must be one of: raw, fraction, percent.
 - Put count_distinct in calculation or MetricOperand.aggregation; count_distinct is not a metric_type.
+- Filter operator must be one of: eq, ne, in, not_in, between, gte, lte, is_null, not_null. For a strict integer condition such as count > 1, use operator="gte" and value=2; never output operator="gt".
+- Every MetricOperand.aggregation must be a non-empty string such as "count_distinct(order_id)", "sum(payment_value)", or "mean(review_score)".
+- Never set MetricOperand.aggregation to null.
 - Every join must use left_dataset, right_dataset, join_keys, how, left_grain, right_grain, and relationship.
 - Top-level aggregation is a V1.5 legacy compatibility field and must be null. Never put group_by, metrics, or other structured calculation information in aggregation. Put grouping in dimensions, time_field, and time_grain; put metric calculations in metrics.
 - dimensions may contain only non-time grouping columns that exist in the dataset profiles. Express time grouping only with time_field and time_grain; never put derived time buckets such as month, month_of_year, quarter, year, year_month, or order_month in dimensions. For a combined grouping such as state by month, put the real business column such as customer_state in dimensions and keep the monthly grouping in time_field and time_grain.
@@ -514,6 +997,7 @@ async def _request_planner_payload(
     selected_model: str,
     prompt: str,
 ) -> Dict[str, Any]:
+    response_schema = _planner_response_schema()
     messages = [
         {
             "role": "system",
@@ -535,7 +1019,7 @@ async def _request_planner_payload(
             "json_schema": {
                 "name": "analysis_plan_v1_5",
                 "strict": True,
-                "schema": AnalysisPlan.model_json_schema(),
+                "schema": response_schema,
             },
         },
     }
@@ -550,7 +1034,7 @@ async def _request_planner_payload(
     if response.status_code == 400:
         request_body.pop("response_format", None)
         messages[-1]["content"] += "\nThe JSON must match this schema:\n" + json.dumps(
-            AnalysisPlan.model_json_schema(), ensure_ascii=False
+            response_schema, ensure_ascii=False
         )
         response = await client.post(
             f"{OPENROUTER_BASE_URL}/chat/completions",
@@ -571,12 +1055,17 @@ async def generate_analysis_plan(
     skills: List[Dict[str, Any]],
     model: Optional[str] = None,
     conversation_context: Optional[Dict[str, Any]] = None,
-) -> tuple[AnalysisPlan, Dict[str, Any]]:
+) -> PlanGenerationOutcome:
     selected_model = _get_model(model)
     attempts: List[Dict[str, Any]] = []
     retry_feedback: Optional[Dict[str, Any]] = None
     last_plan: Optional[AnalysisPlan] = None
     last_report: Optional[PlanCompletenessReport] = None
+    latest_raw_payload: Optional[Dict[str, Any]] = None
+    latest_normalized_payload: Dict[str, Any] = {}
+    latest_actions: List[PlanNormalizationAction] = []
+    latest_validation_errors: List[Dict[str, Any]] = []
+    latest_unresolved_issues: List[PlanCompletenessIssue] = []
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:
             for attempt_number in range(1, 3):
@@ -591,18 +1080,69 @@ async def generate_analysis_plan(
                 payload = await _request_planner_payload(client, selected_model, prompt)
                 content = payload["choices"][0]["message"]["content"] or ""
                 try:
-                    plan = AnalysisPlan.model_validate(_extract_json_object(content))
-                except (json.JSONDecodeError, ValidationError, ValueError, KeyError) as error:
+                    raw_payload = _extract_json_object(content)
+                except (json.JSONDecodeError, ValueError, KeyError) as error:
+                    latest_validation_errors = [{
+                        "type": "json_parse_error",
+                        "loc": [],
+                        "msg": str(error),
+                    }]
                     attempts.append({
                         "attempt": attempt_number,
+                        "raw_schema_valid": False,
                         "schema_valid": False,
                         "ready_for_code_generation": False,
                         "error": str(error),
+                        "validation_errors": latest_validation_errors,
                         "usage": payload.get("usage", {}),
                     })
                     retry_feedback = {
                         "schema_valid": False,
-                        "errors": [str(error)],
+                        "normalized_partial_plan": latest_normalized_payload,
+                        "validation_errors": attempts[-1]["validation_errors"],
+                        "instruction": "Preserve valid prior semantics and repair only the listed representation errors.",
+                    }
+                    continue
+
+                latest_raw_payload = raw_payload
+                try:
+                    AnalysisPlan.model_validate(raw_payload)
+                    raw_schema_valid = True
+                except ValidationError:
+                    raw_schema_valid = False
+
+                normalized = normalize_plan_payload(raw_payload, metric_matches, profiles)
+                latest_normalized_payload = normalized.normalized_payload
+                latest_actions = normalized.actions
+                latest_unresolved_issues = normalized.unresolved_issues
+                try:
+                    plan = AnalysisPlan.model_validate(normalized.normalized_payload)
+                except ValidationError as error:
+                    latest_validation_errors = _validation_errors(error)
+                    attempts.append({
+                        "attempt": attempt_number,
+                        "raw_schema_valid": raw_schema_valid,
+                        "schema_valid": False,
+                        "normalization_recovered": False,
+                        "ready_for_code_generation": False,
+                        "raw_payload": raw_payload,
+                        "normalized_partial_payload": normalized.normalized_payload,
+                        "normalization_actions": [
+                            item.model_dump(mode="json") for item in normalized.actions
+                        ],
+                        "unresolved_issues": [
+                            item.model_dump(mode="json") for item in normalized.unresolved_issues
+                        ],
+                        "validation_errors": latest_validation_errors,
+                        "usage": payload.get("usage", {}),
+                    })
+                    retry_feedback = {
+                        "schema_valid": False,
+                        "normalized_partial_plan": normalized.normalized_payload,
+                        "normalization_actions": attempts[-1]["normalization_actions"],
+                        "unresolved_issues": attempts[-1]["unresolved_issues"],
+                        "validation_errors": latest_validation_errors,
+                        "instruction": "Preserve all valid semantics and repair only the exact field-path errors listed above.",
                     }
                     continue
 
@@ -610,17 +1150,28 @@ async def generate_analysis_plan(
                 report = evaluate_plan_completeness(plan, profiles, metric_matches)
                 last_plan = plan
                 last_report = report
+                latest_validation_errors = []
                 attempts.append({
                     "attempt": attempt_number,
+                    "raw_schema_valid": raw_schema_valid,
                     "schema_valid": True,
+                    "normalization_recovered": not raw_schema_valid,
                     "ready_for_code_generation": report.ready_for_code_generation,
                     "valid_clarification": report.valid_clarification,
+                    "raw_payload": raw_payload,
+                    "normalized_partial_payload": normalized.normalized_payload,
+                    "normalization_actions": [
+                        item.model_dump(mode="json") for item in normalized.actions
+                    ],
+                    "unresolved_issues": [
+                        item.model_dump(mode="json") for item in normalized.unresolved_issues
+                    ],
                     "issues": [item.model_dump(mode="json") for item in report.issues],
                     "usage": payload.get("usage", {}),
                     "deterministic_guard": guard,
                 })
                 if report.ready_for_code_generation or report.valid_clarification:
-                    return plan, {
+                    metadata = {
                         "planner": "llm_structured_output",
                         "model": selected_model,
                         "attempt_count": attempt_number,
@@ -629,28 +1180,62 @@ async def generate_analysis_plan(
                         "deterministic_guard": guard,
                         "completeness": report.model_dump(mode="json"),
                     }
-                retry_feedback = report.model_dump(mode="json")
+                    return PlanGenerationOutcome(
+                        plan=plan,
+                        raw_payload=raw_payload,
+                        normalized_partial_payload=normalized.normalized_payload,
+                        normalization_actions=normalized.actions,
+                        unresolved_issues=normalized.unresolved_issues,
+                        metadata=metadata,
+                    )
+                retry_feedback = {
+                    **report.model_dump(mode="json"),
+                    "normalized_partial_plan": normalized.normalized_payload,
+                    "instruction": "Preserve the existing plan and repair only the listed readiness issues.",
+                }
 
         if last_plan is None:
-            last_plan, guard = _apply_planning_guards(
-                _fallback_plan(profiles, metric_matches, skills),
-                question,
-                profiles,
-                metric_matches,
+            validation_issues = [
+                _issue(
+                    "schema_validation_error",
+                    _field_path(list(item.get("loc") or [])) or "plan",
+                    str(item.get("msg") or "Plan schema validation failed."),
+                )
+                for item in latest_validation_errors
+            ]
+            combined_issues = [*latest_unresolved_issues, *validation_issues]
+            report = PlanCompletenessReport(
+                schema_valid=False,
+                ready_for_code_generation=False,
+                valid_clarification=False,
+                issues=combined_issues,
             )
-            last_report = evaluate_plan_completeness(last_plan, profiles, metric_matches)
-            planner_name = "deterministic_incomplete_fallback"
+            guard = {"applied": False, "blockers": []}
+            planner_name = "llm_structured_output_invalid"
         else:
             guard = attempts[-1].get("deterministic_guard", {"applied": False, "blockers": []})
             planner_name = "llm_structured_output_incomplete"
-        return last_plan, {
+            report = last_report or PlanCompletenessReport(
+                ready_for_code_generation=False,
+                issues=[_issue("plan_incomplete", "plan", "The plan is incomplete.")],
+            )
+        metadata = {
             "planner": planner_name,
             "model": selected_model,
             "attempt_count": 2,
             "replanned": True,
             "attempts": attempts,
             "deterministic_guard": guard,
-            "completeness": last_report.model_dump(mode="json") if last_report else None,
+            "completeness": report.model_dump(mode="json"),
         }
+        return PlanGenerationOutcome(
+            plan=last_plan,
+            raw_payload=latest_raw_payload,
+            normalized_partial_payload=latest_normalized_payload,
+            normalization_actions=latest_actions,
+            validation_errors=latest_validation_errors,
+            unresolved_issues=latest_unresolved_issues,
+            metadata=metadata,
+        )
     except httpx.HTTPStatusError as error:
         raise ValueError(_format_openrouter_http_error(error, selected_model)) from error

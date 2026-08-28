@@ -9,9 +9,15 @@ from app.schemas.analysis import (
     JoinRequirement,
     MetricCandidateRejection,
     MetricOperand,
+    PlanFilter,
     PlannedMetric,
 )
-from app.services.plan_service import evaluate_plan_completeness, generate_analysis_plan
+from app.services.plan_service import (
+    evaluate_plan_completeness,
+    generate_analysis_plan,
+    infer_plan_dataset_usage,
+    normalize_plan_payload,
+)
 
 
 ORDERS_PROFILE = {
@@ -30,6 +36,21 @@ PAYMENTS_PROFILE = {
         {"name": "order_id"},
         {"name": "payment_value"},
         {"name": "payment_type"},
+    ],
+}
+ITEMS_PROFILE = {
+    "file_name": "items.csv",
+    "columns": [
+        {"name": "order_id"},
+        {"name": "product_id"},
+        {"name": "price"},
+    ],
+}
+REVIEWS_PROFILE = {
+    "file_name": "reviews.csv",
+    "columns": [
+        {"name": "order_id"},
+        {"name": "review_score"},
     ],
 }
 
@@ -205,6 +226,205 @@ class PlanCompletenessTest(unittest.TestCase):
         self.assertEqual(report.issues, [])
 
 
+class PlanNormalizationTest(unittest.TestCase):
+    def test_gt_and_lt_are_valid_canonical_operators(self) -> None:
+        for operator in ("gt", "lt"):
+            payload = _ready_plan().model_dump(mode="json")
+            payload["filters"] = [{
+                "dataset": "orders.csv",
+                "column": "value",
+                "operator": operator,
+                "value": 1,
+            }]
+            normalized = normalize_plan_payload(payload, [])
+            plan = AnalysisPlan.model_validate(normalized.normalized_payload)
+            self.assertEqual(plan.filters[0].operator, operator)
+
+    def test_symbolic_filter_operators_are_canonicalized_without_changing_value(self) -> None:
+        aliases = {"==": "eq", "!=": "ne", ">": "gt", ">=": "gte", "<": "lt", "<=": "lte"}
+        for source, expected in aliases.items():
+            payload = _ready_plan().model_dump(mode="json")
+            payload["filters"] = [{
+                "dataset": "orders.csv",
+                "column": "value",
+                "operator": source,
+                "value": 1,
+            }]
+            normalized = normalize_plan_payload(payload, [])
+            item = normalized.normalized_payload["filters"][0]
+            self.assertEqual(item["operator"], expected)
+            self.assertEqual(item["value"], 1)
+
+    def test_rmc_operation_can_fill_null_operand_aggregation(self) -> None:
+        payload = _ready_plan(metrics=[_metric(
+            metric_id="ecommerce.aov",
+            metric_type="ratio",
+            numerator={"description": "Paid amount", "aggregation": "sum(payment_value)", "filters": []},
+            denominator={"description": "Orders", "aggregation": "count_distinct(order_id)", "filters": []},
+        )]).model_dump(mode="json")
+        payload["metrics"][0]["numerator"]["aggregation"] = None
+        normalized = normalize_plan_payload(payload, [{
+            "metric_id": "ecommerce.aov",
+            "resolved_numerator": {"calculation_semantics": "sum(payment_value)"},
+        }])
+        plan = AnalysisPlan.model_validate(normalized.normalized_payload)
+        self.assertEqual(plan.metrics[0].numerator.aggregation, "sum(payment_value)")
+        self.assertIn(
+            "fill_operand_aggregation_from_resolved_metric",
+            {item.code for item in normalized.actions},
+        )
+
+    def test_ad_hoc_null_operand_aggregation_is_not_guessed(self) -> None:
+        payload = _ready_plan(metrics=[_metric(
+            metric_type="ratio",
+            numerator={"description": "Selected rows", "aggregation": "count_distinct(order_id)", "filters": []},
+            denominator={"description": "All rows", "aggregation": "count_distinct(order_id)", "filters": []},
+        )]).model_dump(mode="json")
+        payload["metrics"][0]["numerator"]["aggregation"] = None
+        normalized = normalize_plan_payload(payload, [])
+        self.assertIsNone(normalized.normalized_payload["metrics"][0]["numerator"]["aggregation"])
+        self.assertIn(
+            "unresolved_operand_aggregation",
+            {item.code for item in normalized.unresolved_issues},
+        )
+        with self.assertRaises(ValidationError):
+            AnalysisPlan.model_validate(normalized.normalized_payload)
+
+    def test_metric_ids_are_rebuilt_from_selected_metrics(self) -> None:
+        payload = _ready_plan(metrics=[_metric(metric_id="ecommerce.aov")]).model_dump(mode="json")
+        payload["metric_ids"] = ["ecommerce.gmv", "ecommerce.gmv"]
+        normalized = normalize_plan_payload(payload, [])
+        self.assertEqual(normalized.normalized_payload["metric_ids"], ["ecommerce.aov"])
+
+
+class DatasetUsageInferenceTest(unittest.TestCase):
+    @staticmethod
+    def _plan(**overrides):
+        payload = {
+            "intent": "filtering",
+            "analysis_scope": "Rows selected by structured evidence",
+            "entity_grain": "One row per selected entity",
+            "required_columns": ["order_id"],
+            "steps": ["Use the structured references in the plan"],
+        }
+        payload.update(overrides)
+        return AnalysisPlan(**payload)
+
+    def test_ambiguous_bare_column_does_not_expand_dataset_usage(self) -> None:
+        plan = self._plan()
+        usage = infer_plan_dataset_usage(
+            plan,
+            [ORDERS_PROFILE, ITEMS_PROFILE, REVIEWS_PROFILE],
+            [],
+        )
+        self.assertEqual(usage["used_datasets"], [])
+        self.assertEqual(
+            usage["unqualified_references"][0]["reason"],
+            "ambiguous_no_dataset_expansion",
+        )
+
+    def test_join_endpoints_prevent_bare_key_from_adding_another_table(self) -> None:
+        plan = self._plan(joins=[JoinRequirement(
+            left_dataset="orders.csv",
+            right_dataset="payments.csv",
+            join_keys=["order_id"],
+            how="left",
+            left_grain="One row per order",
+            right_grain="Payment rows per order",
+            relationship="one_to_many",
+        )])
+        usage = infer_plan_dataset_usage(
+            plan,
+            [ORDERS_PROFILE, PAYMENTS_PROFILE, ITEMS_PROFILE],
+            [],
+        )
+        self.assertEqual(usage["used_datasets"], ["orders", "payments"])
+
+    def test_filter_dataset_is_authoritative(self) -> None:
+        plan = self._plan(filters=[PlanFilter(
+            dataset="reviews.csv",
+            column="review_score",
+            operator="lt",
+            value=3,
+        )])
+        usage = infer_plan_dataset_usage(
+            plan,
+            [ORDERS_PROFILE, ITEMS_PROFILE, REVIEWS_PROFILE],
+            [],
+        )
+        self.assertIn("reviews", usage["used_datasets"])
+
+    def test_qualified_reference_identifies_its_dataset(self) -> None:
+        plan = self._plan(required_columns=["items.csv.order_id"])
+        usage = infer_plan_dataset_usage(plan, [ORDERS_PROFILE, ITEMS_PROFILE], [])
+        self.assertEqual(usage["used_datasets"], ["items"])
+
+    def test_unique_profile_match_can_bind_bare_column(self) -> None:
+        plan = self._plan(required_columns=["review_score"])
+        usage = infer_plan_dataset_usage(plan, [ORDERS_PROFILE, REVIEWS_PROFILE], [])
+        self.assertEqual(usage["used_datasets"], ["reviews"])
+
+    def test_explicit_unconnected_dataset_remains_blocked(self) -> None:
+        plan = self._plan(
+            required_columns=[
+                "orders.csv.order_id",
+                "payments.csv.payment_value",
+                "reviews.csv.review_score",
+            ],
+            joins=[JoinRequirement(
+                left_dataset="orders.csv",
+                right_dataset="payments.csv",
+                join_keys=["order_id"],
+                how="left",
+                left_grain="One row per order",
+                right_grain="Payment rows per order",
+                relationship="one_to_many",
+            )],
+        )
+        report = evaluate_plan_completeness(
+            plan,
+            [ORDERS_PROFILE, PAYMENTS_PROFILE, REVIEWS_PROFILE],
+            [],
+        )
+        self.assertIn("missing_join_requirement", {item.code for item in report.issues})
+
+    def test_rmc_alternative_bindings_are_not_all_expanded(self) -> None:
+        payload = _ready_plan(
+            metric_ids=["ecommerce.payment_gmv"],
+            metrics=[_metric(metric_id="ecommerce.payment_gmv")],
+            joins=[JoinRequirement(
+                left_dataset="orders.csv",
+                right_dataset="payments.csv",
+                join_keys=["order_id"],
+                how="left",
+                left_grain="One row per order",
+                right_grain="Payment rows per order",
+                relationship="one_to_many",
+            )],
+        ).model_dump(mode="json")
+        candidate = {
+            "metric_id": "ecommerce.payment_gmv",
+            "required_bindings": {
+                "order_id": [
+                    {"dataset": "orders.csv", "column": "order_id"},
+                    {"dataset": "payments.csv", "column": "order_id"},
+                    {"dataset": "items.csv", "column": "order_id"},
+                ],
+                "paid_amount": [
+                    {"dataset": "payments.csv", "column": "payment_value"},
+                ],
+            },
+        }
+        normalized = normalize_plan_payload(
+            payload,
+            [candidate],
+            [ORDERS_PROFILE, PAYMENTS_PROFILE, ITEMS_PROFILE],
+        )
+        columns = normalized.normalized_payload["required_columns"]
+        self.assertIn("payments.csv.payment_value", columns)
+        self.assertNotIn("items.csv.order_id", columns)
+
+
 class PlannerReplanTest(unittest.IsolatedAsyncioTestCase):
     async def test_replan_once_then_pass(self) -> None:
         incomplete = _ready_plan(metrics=[]).model_dump(mode="json")
@@ -213,7 +433,7 @@ class PlannerReplanTest(unittest.IsolatedAsyncioTestCase):
             "app.services.plan_service._request_planner_payload",
             AsyncMock(side_effect=[_payload(incomplete), _payload(complete)]),
         ) as request:
-            plan, metadata = await generate_analysis_plan(
+            outcome = await generate_analysis_plan(
                 "Calculate total value",
                 [ORDERS_PROFILE],
                 [],
@@ -221,10 +441,13 @@ class PlannerReplanTest(unittest.IsolatedAsyncioTestCase):
                 model="test-model",
             )
 
+        plan = outcome.plan
+        metadata = outcome.metadata
         self.assertEqual(request.await_count, 2)
         self.assertTrue(metadata["replanned"])
         self.assertEqual(metadata["attempt_count"], 2)
         self.assertTrue(metadata["completeness"]["ready_for_code_generation"])
+        self.assertIsNotNone(plan)
         self.assertEqual(plan.metrics[0].key, "total_value")
 
     async def test_replan_once_then_still_fails(self) -> None:
@@ -233,7 +456,7 @@ class PlannerReplanTest(unittest.IsolatedAsyncioTestCase):
             "app.services.plan_service._request_planner_payload",
             AsyncMock(side_effect=[_payload(incomplete), _payload(incomplete)]),
         ) as request:
-            _, metadata = await generate_analysis_plan(
+            outcome = await generate_analysis_plan(
                 "Calculate total value",
                 [ORDERS_PROFILE],
                 [],
@@ -241,12 +464,59 @@ class PlannerReplanTest(unittest.IsolatedAsyncioTestCase):
                 model="test-model",
             )
 
+        metadata = outcome.metadata
         self.assertEqual(request.await_count, 2)
         self.assertEqual(metadata["planner"], "llm_structured_output_incomplete")
         self.assertFalse(metadata["completeness"]["ready_for_code_generation"])
         self.assertIn(
             "missing_metrics",
             {item["code"] for item in metadata["completeness"]["issues"]},
+        )
+
+    async def test_schema_invalid_plan_preserves_partial_semantics_and_fails_closed(self) -> None:
+        partial = _ready_plan().model_dump(mode="json")
+        partial["analysis_scope"] = "Delivered orders in 2017"
+        partial["filters"] = [{
+            "dataset": "orders.csv",
+            "column": "order_status",
+            "operator": ">",
+            "value": 1,
+        }]
+        partial["metrics"][0].update({
+            "metric_type": "ratio",
+            "numerator": {
+                "description": "Selected orders",
+                "aggregation": None,
+                "filters": [],
+            },
+            "denominator": {
+                "description": "All orders",
+                "aggregation": "count_distinct(order_id)",
+                "filters": [],
+            },
+        })
+        with patch(
+            "app.services.plan_service._request_planner_payload",
+            AsyncMock(side_effect=[_payload(partial), _payload(partial)]),
+        ) as request:
+            outcome = await generate_analysis_plan(
+                "Calculate a filtered ratio",
+                [ORDERS_PROFILE],
+                [],
+                [],
+                model="test-model",
+            )
+
+        self.assertEqual(request.await_count, 2)
+        self.assertIsNone(outcome.plan)
+        self.assertEqual(outcome.metadata["planner"], "llm_structured_output_invalid")
+        self.assertFalse(outcome.metadata["completeness"]["schema_valid"])
+        self.assertEqual(outcome.normalized_partial_payload["analysis_scope"], "Delivered orders in 2017")
+        self.assertEqual(outcome.normalized_partial_payload["metrics"][0]["key"], "total_value")
+        self.assertEqual(outcome.normalized_partial_payload["filters"][0]["operator"], "gt")
+        self.assertIn(
+            "unresolved_operand_aggregation",
+            {item.code for item in outcome.unresolved_issues},
         )
 
 
