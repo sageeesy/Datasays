@@ -1,13 +1,14 @@
 # DataSays Evaluation / 评测说明
 
-DataSays keeps two complementary 24-case suites over prepared 2017 tables from the [Brazilian E-Commerce Public Dataset by Olist](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce). The suites answer different questions and must not be merged into one headline score.
+DataSays currently uses two headline evaluation tracks: a 13-case cross-capability benchmark for analysis breadth and an Olist-24 stress test for business-analytics reliability. A legacy 24-case Olist calculation suite is retained as a supporting deterministic regression asset. These suites answer different questions and must not be merged into one headline score.
 
-DataSays 基于 [Olist 巴西电商公开数据集](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce)的 2017 年精简表保留两套互补的 24 题评测。两套题回答的问题不同，不应合并成一个笼统的总分。
+DataSays 当前使用两条主要评测轨道：13 题的跨能力 Benchmark 验证分析广度，Olist-24 压力测试验证经营分析可靠性。项目另保留一套 24 题的 Olist 确定性计算回归题作为辅助资产。这些题集回答的问题不同，不应合并成一个笼统总分。
 
 | Suite / 题集 | Purpose / 目的 | Primary signal / 核心信号 | Runner |
 |---|---|---|---|
-| Olist Calculation Suite v1 | Closed-form calculation regression / 确定性计算回归 | Exact numeric accuracy / 精确数值正确率 | `evals/run_eval.py` |
-| Olist Business Analysis Suite v2 | End-to-end Agent capability / 完整经营分析能力 | Facts, business reasoning, clarification, memory / 事实、业务要点、澄清与记忆 | `evals/run_business_eval.py` |
+| Analysis Capability Benchmark V1 | Breadth across heterogeneous analysis tasks / 异构分析任务的能力广度 | Planning, execution, audited references, Evidence, strict E2E / 计划、执行、独立参考值、Evidence 与严格端到端 | `evals/run_capability_probes.py` |
+| Olist-24 Business Analytics Reliability Benchmark | Strict semantic reliability stress test / 严格业务语义可靠性压力测试 | Metric semantics, population, denominator, grain, joins, time, clarification / 指标口径、总体、分母、粒度、Join、时间与澄清 | `evals/run_business_eval.py` |
+| Olist Calculation Suite v1 (retained) | Supporting closed-form regression / 辅助确定性计算回归 | Exact scalar accuracy / 精确标量数值 | `evals/run_eval.py` |
 
 The cases are authored for DataSays. They are not official Olist, DataSciBench, DABench, DABstep, or DS-1000 benchmark releases. Olist fixture licensing and attribution are documented in [`data/olist/README.md`](data/olist/README.md).
 
@@ -31,7 +32,30 @@ Reducing CSV rows lowers upload, profiling, and sandbox runtime, but barely chan
 
 缩减 CSV 会降低上传、数据画像和沙箱执行成本，但对 Token 影响很小，因为模型收到的是有界字段画像，而不是原始数据行。Token 主要由题目数、模型调用数、修复次数和重复 Prompt 上下文决定。
 
-## v1: Calculation Suite / 计算回归题集
+## Analysis Capability Benchmark V1 / 分析能力评测 V1
+
+[`capability_probe_cases.json`](capability_probe_cases.json) defines 13 cases across Core Data Analysis, Statistical Analysis, Predictive Analysis, and Behavioral Analysis. Independent deterministic references are stored in [`capability_probe_references.json`](capability_probe_references.json). The benchmark separates canonical planning, Gate readiness, execution, numerical reference matching, Evidence coverage, and strict Plan-to-Evidence-to-Reference completion.
+
+[`capability_probe_cases.json`](capability_probe_cases.json) 定义了 13 道覆盖基础数据分析、统计分析、预测分析和行为分析的题目，独立确定性参考值保存在 [`capability_probe_references.json`](capability_probe_references.json)。评测分开记录 canonical planning、Gate readiness、执行、数值参考匹配、Evidence coverage 与严格 Plan-to-Evidence-to-Reference 闭环。
+
+Current frozen baseline / 当前冻结基线：
+
+- 13 cases across 4 capability tracks / 13 题、4 个 capability tracks；
+- 12/13 successful executions / 12/13 成功执行；
+- all 12 executed cases matched their audited numerical references / 12 道已执行题均匹配独立审核数值参考；
+- 7/13 strict Plan → Evidence → Reference E2E passes / 7/13 严格端到端通过。
+
+The 12/12 figure is conditional numerical reference matching among executed cases, not overall benchmark accuracy. The full local run artifact is saved under `evals/results/` and excluded from Git.
+
+12/12 表示“已执行题目中的数值参考匹配”，不是整体正确率。完整本地 artifact 保存在 `evals/results/` 且不进入 Git。
+
+```bash
+cd server
+python evals/run_capability_probes.py \
+  --output evals/results/analysis-capability-baseline.json
+```
+
+## Retained v1 Calculation Suite / 保留的 v1 计算回归题集
 
 [`benchmark_cases.json`](benchmark_cases.json) contains 24 closed-form questions with deterministic scalar answers and tolerances. It tests aggregation, filtering, dates, multi-table joins, entity grain, reconciliation, and basic business metrics. Its main pass condition is numeric accuracy from `AnalysisResult.primary_value`; incidental numbers in prose cannot pass a case.
 
@@ -49,9 +73,19 @@ python evals/run_eval.py \
   --output evals/results/olist-v1-qwen3.6-flash.json
 ```
 
-## v2: Business Analysis Suite / 经营分析能力题集
+## Olist-24 Business Analytics Reliability Benchmark / Olist-24 业务分析可靠性评测
 
-Current full baseline / 当前全量基线：[`baselines/qwen3.6-flash-v2.1.0-2026-08-21.md`](baselines/qwen3.6-flash-v2.1.0-2026-08-21.md). Qwen3.6 Flash passed 4/24 cases on fixture v2.1.0; the report includes category scores, all case outcomes, limitations, and failure analysis. / Qwen3.6 Flash 在 v2.1.0 数据上通过 4/24 题，报告包含分类分数、逐题结果、限制和失败归因。
+Current post-RMC diagnostic baseline / 当前 post-RMC 诊断基线：**3/24 strict case passes**. It used `qwen/qwen3.6-flash`, explicit `project_id=olist`, and the current RMC, Planner, Gate, Code, Evidence, and Validator path. The complete local artifact is `evals/results/post-rmc-diagnostic-baseline-20260826.json` and is intentionally excluded from Git; the committed facts and failure analysis are recorded in the [evaluation-driven reliability retrospective](../../docs/evaluation-driven-reliability-improvement.md). This is a reliability stress-test result, not DataSays' overall analysis accuracy.
+
+当前 post-RMC 诊断基线为 **3/24 严格 case 通过**。该轮固定 `qwen/qwen3.6-flash`、显式传入 `project_id=olist`，并走当前 RMC、Planner、Gate、Code、Evidence 和 Validator 链路。完整本地 artifact 为 `evals/results/post-rmc-diagnostic-baseline-20260826.json`，按设计不进入 Git；可提交的事实与失败分析记录在[Evaluation-driven Reliability 技术复盘](../../docs/evaluation-driven-reliability-improvement.md)。这是可靠性压力测试结果，不是 DataSays 整体分析正确率。
+
+Historical v2.1.0 baseline / 历史 v2.1.0 基线：[`baselines/qwen3.6-flash-v2.1.0-2026-08-21.md`](baselines/qwen3.6-flash-v2.1.0-2026-08-21.md). Qwen3.6 Flash passed 4/24 cases in that earlier frozen run. The 4/24 record remains historical evidence and has not been overwritten by the newer baseline.
+
+历史 v2.1.0 基线见 [`baselines/qwen3.6-flash-v2.1.0-2026-08-21.md`](baselines/qwen3.6-flash-v2.1.0-2026-08-21.md)，当时 Qwen3.6 Flash 在该冻结版本中通过 4/24 题。这一 4/24 仍作为历史证据保留，没有被新基线覆盖。
+
+The lower post-RMC headline count is not, by itself, evidence that RMC reduced analysis capability. The frozen runs differ in planning and fail-closed contracts, and the post-RMC audit identified Planner readiness, result/evidence representation, scorer behavior, and benchmark assumptions as distinct failure layers. The repository does not support attributing the one-case decrease to a single cause.
+
+post-RMC 的表面通过数更低，本身不能证明 RMC 降低了分析能力。两次冻结运行的 planning 与 fail-closed contract 不同，post-RMC 审计也将 Planner readiness、result/evidence representation、scorer behavior 和 benchmark assumptions 分成了不同失败层。现有证据不支持把一题的下降归因于某一个因素。
 
 Historical pre-sampling integration smoke test / 15k 抽样前的历史冒烟测试：[`baselines/qwen3.6-flash-v2-smoke-2026-08-21.md`](baselines/qwen3.6-flash-v2-smoke-2026-08-21.md). It is not comparable with the current fixture. / 它不能与当前 fixture 直接比较。
 
@@ -169,14 +203,18 @@ python -m unittest tests.test_olist_benchmark tests.test_olist_business_benchmar
 
 ## Truthfulness Boundaries / 真实性边界
 
-- v2.1.0 has one complete Qwen3.6 Flash baseline; v1.1.0 still requires a new baseline. Earlier reports used the 45,101-order fixture and are not directly comparable.
+- The current headline baselines are the 13-case Analysis Capability Benchmark V1 run and the post-RMC Olist-24 diagnostic run. They measure breadth and strict business reliability respectively and are never combined.
+- The 4/24 v2.1.0 report is a historical frozen baseline; the current post-RMC Olist-24 diagnostic baseline is 3/24. The lower count has multiple documented failure layers and no single proven cause.
+- The retained Olist Calculation Suite v1.1.0 still requires a new publishable baseline. Earlier reports used the 45,101-order fixture and are not directly comparable.
 - v2.1.0 contains one known authored-threshold issue: intended two-of-three term coverage was stored as `0.67`, which is stricter than exact `2/3`. The raw result is preserved and the issue is disclosed in the baseline report.
 - A deterministic reference fact proves the expected calculation for the prepared fixtures, not universal business truth.
 - Term coverage can detect missing required concepts, but cannot fully judge recommendation quality or causal reasoning.
 - A passed structured contract does not independently prove every generated transformation is semantically correct.
 - Full-suite model runs incur API cost and should record model ID, date, configuration, and raw result JSON.
 
-- v2.1.0 已有一次完整 Qwen3.6 Flash 基线；v1.1.0 仍需重跑。早期报告使用 45,101 订单数据，不能直接比较。
+- 当前首要基线是 13 题 Analysis Capability Benchmark V1 与 post-RMC Olist-24 诊断运行；两者分别测试能力广度与严格业务可靠性，不合并计分。
+- 4/24 是历史 v2.1.0 冻结基线，当前 post-RMC Olist-24 诊断基线为 3/24。已记录的失败涉及多个层次，不存在已证明的单一下降原因。
+- 保留的 Olist Calculation Suite v1.1.0 仍需新的可发布基线。早期报告使用 45,101 订单数据，不能直接比较。
 - v2.1.0 已知一个阈值编写问题：预期的三组要点命中两组被写成 `0.67`，它比精确的 `2/3` 更严格。原始分数保持不变，并在基线报告中披露。
 - 确定性标准答案只证明当前精简数据和既定口径下的计算，不代表普适业务真理。
 - 词组覆盖可以发现遗漏要点，但不能完整评价建议质量或因果推理。

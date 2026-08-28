@@ -2,85 +2,155 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-DataSays is an evidence-first data analysis Agent for people who need reproducible answers from CSV data without writing Python. It profiles uploaded datasets, grounds business metrics in local definitions, creates a typed analysis plan, executes generated Python in a constrained sandbox, validates the artifact, and exposes the evidence trail in a bilingual Web workspace.
+**Evidence-first Data Analysis Agent for tabular and business data.**
 
-The current repository is a portfolio-ready local MVP. It demonstrates a bounded Agent workflow; it is not yet a production multi-tenant SaaS.
+DataSays turns natural-language questions and CSV files into structured analysis plans, sandbox-executed Python, and machine-readable evidence. Instead of treating runnable code as proof of correctness, it makes metric definitions, analysis populations, denominators, joins, assumptions, and validation results visible and traceable.
 
-## Product
+DataSays is a local portfolio prototype for verifiable analytics workflows. It is not a production ML platform, an autonomous data scientist, or a fully general analytics system.
 
-DataSays is designed around a simple promise: a business answer should say how it was calculated, which fields and metric definitions it used, and whether the executable result passed validation.
+| Current capability baseline | Result |
+|---|---:|
+| Capability coverage | 13 cases / 4 tracks |
+| Successful executions | 12 / 13 |
+| Audited numerical reference matches | 12 / 12 executed cases |
+| Strict Plan -> Evidence -> Reference E2E | 7 / 13 |
 
-### Product surfaces
+The numerical audit and strict E2E score are reported together intentionally: correct calculations do not by themselves prove that the full product contract is complete.
 
-- **Verified Analysis:** upload one or more CSV files and receive one sandbox-backed answer with its plan, code, checks, assumptions, repair history, and execution trace.
-- **Comparison Lab:** compare three models across three prompt strategies for development and evaluation. This is not the primary customer workflow.
-- **Data Dashboard:** open chart-ready structured results as interactive tables and charts without asking sandbox code to render images.
+## Why Evidence-first Analytics
 
-The UI supports Simplified Chinese and English, light and dark themes, responsive side panels, persistent conversations, and reusable dashboard artifacts.
+Two Python programs can both execute successfully while answering different business questions. For example, one AOV calculation may include every paid order while another includes only completed orders. If the numerator and denominator use different populations, the code can run without error and still produce a misleading answer.
 
-## Agent Workflow
+```text
+Executable code != correct metric semantics != trustworthy answer
+```
+
+DataSays therefore treats the analysis plan, metric definition, population, denominator, grain, joins, assumptions, executable result, and supporting evidence as one connected contract.
+
+## How It Works
 
 ```mermaid
 flowchart LR
-    A["Profile CSV data"] --> M["Load bounded conversation memory"]
-    M --> B["Select analysis Skills"]
-    B --> C["Retrieve metric definitions"]
-    C --> D["Create typed analysis plan"]
-    D --> E{"Clarification required?"}
-    E -- "Yes" --> F["Ask user to clarify"]
-    E -- "No" --> G["Generate Python"]
-    G --> H["Execute in sandbox"]
-    H --> I["Validate artifact"]
-    I -- "Repairable failure" --> R["Repair Python from validation feedback"]
-    R --> H
-    I -- "Pass" --> J["Render verified answer"]
-    J --> K["Save evidence and Dashboard artifacts"]
+    A["User Question + CSV"] --> B["Dataset Profile"]
+    B --> C["Metric Grounding / RMC"]
+    C --> D["AnalysisPlan"]
+    D --> E{"Readiness Gate"}
+    E -- "Clarify / Stop" --> F["Safe Response"]
+    E -- "Ready" --> G["Python Sandbox"]
+    G --> H["Structured Evidence"]
+    H --> I["Validation"]
+    I --> J["Final Answer + Trace"]
 ```
 
-The workflow is implemented as a typed LangGraph `StateGraph`. Conditional edges control clarification, validation, bounded repair, and completion. Every run receives a unique graph thread ID, node state is checkpointed to local SQLite, and `POST /api/query/stream` sends real node start/completion events to the UI. Checkpoint resume and human approval APIs are not exposed yet.
+The Resolved Metric Contract (RMC) combines reusable metric knowledge, project-level overrides, and bindings to real dataset fields into one effective contract for planning. A fail-closed readiness gate prevents incomplete plans from reaching code generation. Generated Python runs in a constrained sandbox, and the result links planned metrics to machine-readable evidence.
 
-## What Is Implemented
+The workflow is implemented with LangGraph, FastAPI, and Pydantic contracts, but the product boundary is the evidence-first workflow rather than any individual framework.
 
-- Dataset profiling: types, missingness, semantic roles, cardinality, ranges, samples, and duplicate rate.
-- Four local analysis playbooks for quality checks, aggregation/ranking, time/cohort analysis, and metric diagnostics.
-- Versioned ecommerce and SaaS metric definitions with deterministic alias matching and schema binding.
-- Pydantic contracts for analysis plans, results, validation reports, and visualization specifications.
-- OpenRouter model access with Qwen3.6 Flash, GPT-5.4 Mini, and Kimi K2.5 controls.
-- Generated Python execution with timeout, CPU/memory limits, no network, non-root user, and read-only data mount when Docker mode is enabled.
-- Deterministic validation and a bounded code repair loop.
-- LangGraph orchestration with explicit planning, execution, validation, repair, and finalization nodes.
-- SQLite graph checkpoints plus SSE progress events rendered live in the analysis workspace.
-- Interactive bar, line, pie, scatter, histogram, box, heatmap, and table views.
-- SQLite persistence for conversations, messages, analysis runs, file associations, code, evidence, trace, and Dashboard payloads.
-- Dataset-scoped conversation memory using recent messages and previously validated findings; failed runs are excluded from trusted context.
-- Two complementary 24-case Olist suites: exact calculation regression (v1) and capability-oriented business analysis with clarification and multi-turn memory (v2).
+## Analysis Capabilities
 
-## Architecture
+| Capability | Status | Current evidence |
+|---|---|---|
+| Filtering and conditional metrics | **Supported** | Strict E2E capability case |
+| Grouped comparison | **Supported** | Strict E2E capability case |
+| Ranking / Top-N | **Supported** | Strict E2E capability case |
+| Distribution / quantiles | **Supported** | Strict E2E capability case |
+| Descriptive statistics | **Partially Supported** | Correct calculations; one output-typing gap |
+| Confidence intervals, Welch tests, effect size, correlation | **Experimental / Computationally Demonstrated** | Correct computations; incomplete Evidence coverage |
+| Logistic Regression, Random Forest, Linear Regression | **Experimental / Computationally Demonstrated** | Fixed-data probes with deterministic split and reference |
+| Cohort / retention | **Partially Supported** | Reference values reproduced; event semantics remain limited |
+| Funnel analysis | **Not Yet Demonstrated** | Current plan is stopped by the readiness contract before execution |
+
+Experimental means that a fixed probe executed and matched its independent reference. It does not mean that DataSays provides a production-ready statistical or predictive modeling workflow.
+
+## Reliability Features
+
+- **Metric grounding:** resolves business metric identity, formulas, field bindings, and project-level policies before code generation.
+- **Population and denominator:** keeps shared base populations separate from metric-specific numerator, denominator, and filter rules.
+- **Grain and joins:** records entity grain, join relationships, and required pre-aggregation to reduce duplication and join inflation.
+- **Plan normalization:** deterministically repairs serialization differences without inventing business meaning.
+- **Fail-closed Gate:** replans, asks for clarification, or stops safely when the analytical contract is incomplete.
+- **Structured Evidence:** maps each planned metric to scalar or dataset evidence that can be checked independently of prose.
+
+## Evaluation
+
+DataSays uses two separate benchmarks. They measure different qualities and are never combined into one overall accuracy score.
+
+### Analysis Capability Benchmark V1
+
+This 13-case suite measures breadth across Core, Statistical, Predictive, and Behavioral analysis. Expected values are generated independently with deterministic Python references, fixed data, and fixed seeds.
+
+| System quality metric | Result |
+|---|---:|
+| Canonical AnalysisPlan | 13 / 13 |
+| Gate Ready | 12 / 13 |
+| Successful execution | 12 / 13 |
+| Valid AnalysisResult | 12 / 13 |
+| Strict machine-readable reference | 9 / 13 |
+| Evidence complete | 8 / 13 |
+| Audited strict E2E | 7 / 13 |
+
+All 12 executed cases matched their audited core numerical references. The lower strict scores expose product gaps in result representation, Evidence coverage, and behavioral semantics rather than hiding them behind execution success.
+
+See the [case definitions](server/evals/capability_probe_cases.json), [deterministic references](server/evals/capability_probe_references.json), and [capability runner](server/evals/run_capability_probes.py).
+
+### Business Analytics Reliability Benchmark
+
+Olist-24 is a strict reliability stress test for metric semantics, population, numerator and denominator policy, entity grain, multi-table joins, pre-aggregation, business-event time, clarification, and structured evidence.
+
+The current post-RMC strict baseline is **3 / 24**. This is deliberately not presented as DataSays' overall analysis accuracy: the suite retains difficult failures to diagnose reliability layers, benchmark assumptions, and representation gaps. It is not mixed with the Analysis Capability Benchmark score.
+
+See the [evaluation guide](server/evals/README.md), [benchmark design](server/evals/BENCHMARK_DESIGN.md), and [evaluation-driven reliability retrospective](docs/evaluation-driven-reliability-improvement.md).
+
+## Example Workflow
+
+**Question**
+
+> Analyze 2017 delivered orders, Payment GMV, AOV, Delivery Rate, and their monthly trends.
+
+**Resolved plan**
+
+- Use the purchase event as the reporting time.
+- Aggregate payment rows to `order_id` before joining.
+- Calculate Payment GMV and AOV on delivered orders.
+- Preserve all eligible orders as the Delivery Rate denominator.
+- Keep orders as the denominator-preserving left-side population.
+
+**Evidence-backed result**
+
+| Planned fact | Result |
+|---|---:|
+| Delivered Orders | 14,429 |
+| Payment GMV | 2,320,454.39 |
+| AOV | 160.82 |
+| Delivery Rate | 96.19% |
+| Monthly trend | Structured dataset |
+
+The important output is not only the four values; it is the traceable path from question to metric contract, plan, Python computation, evidence, and validation.
+
+## Current Limitations
+
+- Statistical Evidence is not yet fully structured even when the underlying calculation is correct.
+- Funnel analysis does not yet have a stable executable contract.
+- Cohort and retention event semantics remain limited.
+- Predictive tasks are experimental probes, not production ML support.
+- The primary input is CSV; Excel, SQL, PDF, and image extraction are not current product capabilities.
+- Validation checks execution and explicit contracts but cannot independently prove every business interpretation is semantically correct.
+- DataSays is a local single-user prototype, not a production multi-tenant service.
+
+## Evaluation-driven Development
 
 ```text
-datasays/
-├── App.tsx                         # React application shell and persisted chat state
-├── components/                     # Analysis, comparison, evidence, and Dashboard UI
-│   └── ui/                         # Only the shadcn/Radix primitives in active use
-├── lib/                            # API client, shared types, i18n, and formatting
-├── styles/                         # Global Tailwind styles
-├── server/
-│   ├── main.py                     # FastAPI entry point
-│   ├── app/
-│   │   ├── routes/                 # Files, queries, and conversations
-│   │   ├── schemas/                # Typed Agent and visualization contracts
-│   │   ├── services/               # Planning, tools, sandbox, validation, persistence
-│   │   └── knowledge/              # Analysis playbooks and metric packs
-│   ├── evals/                      # 24-case Olist business-analytics benchmark
-│   ├── tests/                      # Deterministic service tests
-│   ├── Dockerfile                  # FastAPI runtime
-│   └── Dockerfile.python-sandbox   # Isolated analysis runtime
-├── docs/                           # Product, persistence, and visualization contracts
-├── docker-compose.yml              # Local self-hosted stack
-└── Dockerfile.frontend             # React build served through Nginx
+Benchmark
+-> identify the first failure layer
+-> make the smallest deterministic change
+-> add regression tests
+-> rerun only affected cases
+-> freeze a new baseline
 ```
 
-## Local Development
+This process separates retrieval, planning, readiness, code execution, result contracts, evidence, semantic correctness, and scorer behavior. Failed stress-test cases are retained instead of weakening expected answers to improve headline scores.
+
+## Running Locally
 
 ### Prerequisites
 
@@ -89,44 +159,39 @@ datasays/
 - Docker Desktop for the recommended sandbox mode
 - An [OpenRouter](https://openrouter.ai/) API key
 
-### 1. Configure the backend
+### Configure and start
 
 ```bash
 cp server/env.example server/.env
 ```
 
-Set `OPENROUTER_API_KEY` in `server/.env`. Build the sandbox once:
+Set `OPENROUTER_API_KEY` in `server/.env`, then build the sandbox image once:
 
 ```bash
 docker build -t datasays-python-sandbox -f server/Dockerfile.python-sandbox server
 ```
 
-### 2. Start the application
+Start the backend and frontend in separate terminals:
 
 ```bash
-# Terminal 1
 ./start-backend.sh
-
-# Terminal 2
 ./start-frontend.sh
 ```
 
-Open `http://127.0.0.1:5173`. The API and OpenAPI documentation run at `http://127.0.0.1:8000` and `http://127.0.0.1:8000/docs`.
+Open `http://127.0.0.1:5173`. The API documentation is available at `http://127.0.0.1:8000/docs`.
 
-For development without Docker, set `USE_DOCKER=false` in `server/.env`. This executes generated code directly on the host and must not be used for a public deployment.
+For local development without Docker, set `USE_DOCKER=false` in `server/.env`. This executes generated Python on the host and must not be used for a public deployment.
 
-## Docker Self-Hosting
-
-Docker Compose packages the frontend, FastAPI backend, sandbox image, persistent uploads, and SQLite data volumes. Docker Desktop is still required because the Agent executes generated Python in isolated containers.
+### Docker Compose
 
 ```bash
 export OPENROUTER_API_KEY="your-key"
 docker compose up --build
 ```
 
-Open `http://localhost:8080`. Stop the stack with `docker compose down`. Named volumes preserve uploaded files and conversation history across container replacement.
+Open `http://localhost:8080`. Named volumes preserve uploaded files and conversation data.
 
-## Verification
+### Development checks and evaluation
 
 ```bash
 npm ci
@@ -134,34 +199,45 @@ npm run build
 
 cd server
 python -m unittest discover -s tests -v
+python evals/run_capability_probes.py
 ```
 
-The evaluation folder contains two LLM-backed suites over the same prepared Olist tables. Run `python evals/run_eval.py` for the v1 deterministic calculation regression, or `python evals/run_business_eval.py` for the v2 business-analysis capability suite covering metric execution, grain safety, diagnosis, decision support, clarification, and multi-turn memory. These are locally authored suites, not official Olist or DataSciBench releases. See [`server/evals/README.md`](server/evals/README.md), the [benchmark design note](server/evals/BENCHMARK_DESIGN.md), and the [current v2.1.0 Qwen3.6 Flash baseline](server/evals/baselines/qwen3.6-flash-v2.1.0-2026-08-21.md).
+The evaluation runner calls the configured model and can incur latency and API cost. Evaluation result artifacts are local and excluded from Git.
 
-## Persistence And Privacy
+## Data, Persistence, and Privacy
 
-- SQLite defaults to `server/data/datasays.db`.
-- LangGraph checkpoints default to `server/data/agent-checkpoints.db` and use one thread ID per analysis run.
-- Uploaded CSVs and metadata default to `server/uploads/`.
-- Browser refresh restores completed messages, evidence, code, traces, file links, and Dashboard artifacts.
-- Follow-up questions receive a bounded context packet containing recent dialogue and validated findings from the same datasets. This is not semantic or long-term preference memory.
-- Dataset profiles, samples, generated artifacts, or result summaries may be sent to the selected OpenRouter model. Local hosting does not currently mean fully offline processing.
-- `.env`, uploads, databases, virtual environments, dependencies, and local Agent design Skills are excluded from Git.
+- Conversations and analysis runs are stored in local SQLite by default.
+- LangGraph checkpoints use a separate local SQLite database.
+- Uploaded CSV files and metadata remain in the local uploads directory.
+- Browser refresh restores persisted messages, evidence, code, traces, file links, and Dashboard artifacts.
+- Dataset profiles, samples, prompts, or generated artifacts may be sent to the selected OpenRouter model; local hosting is not fully offline processing.
+- Environment files, uploads, databases, checkpoints, and evaluation artifacts are excluded from Git.
 
-See [persistence and memory](docs/PERSISTENCE_AND_MEMORY.md) and the [visualization contract](docs/VISUALIZATION_CONTRACT.md) for details.
+See [persistence and memory](docs/PERSISTENCE_AND_MEMORY.md) and the [visualization contract](docs/VISUALIZATION_CONTRACT.md).
 
-## Current Boundaries
+## Roadmap
 
-- CSV input only; Excel, SQL, PDF, and image extraction are later work.
-- Local metric retrieval is deterministic keyword/schema matching, not vector RAG.
-- Conversation memory is bounded and dataset-scoped; it does not yet use embeddings, rolling summaries, or long-term user preferences.
-- Graph checkpoints are durable for inspection and recovery foundations, but the product does not yet expose pause/resume, approval, or time-travel controls.
-- Validation proves execution and contract consistency; it does not independently prove every generated calculation is semantically correct.
-- SQLite and local files are suitable for a local MVP, not multi-user SaaS.
-- Public deployment still requires authentication, tenant isolation, object storage, a database service, job queues, quotas, monitoring, and a hardened remote execution worker.
+1. Complete machine-readable Evidence for statistical analysis.
+2. Stabilize one behavioral workflow: Funnel or Cohort.
+3. Broaden capability evaluation without weakening deterministic references or reliability requirements.
 
-The current scope and roadmap are described in [DataSays 2.0](docs/DATASAYS_2_0.md) and the [Verified Business Analysis Agent PRD](docs/PRD_VERIFIED_BUSINESS_ANALYSIS_AGENT.md).
+## Repository Structure
+
+```text
+datasays/
+├── App.tsx                     # React analysis workspace
+├── components/                 # Analysis, evidence, comparison, and Dashboard UI
+├── lib/                        # API client, shared types, i18n, and formatting
+├── server/
+│   ├── main.py                 # FastAPI entry point
+│   ├── app/                    # Agent routes, contracts, and services
+│   ├── app/knowledge/          # Skills, metric definitions, and project overrides
+│   ├── evals/                  # Capability and reliability benchmarks
+│   └── tests/                  # Deterministic regression tests
+├── docs/                       # Product contracts and technical retrospectives
+└── docker-compose.yml          # Local self-hosted stack
+```
 
 ## License
 
-This repository originated as an ISE547 course project. No standalone open-source license has been granted yet.
+This repository originated as an ISE547 course project. No standalone open-source software license has been granted yet. Olist benchmark data has separate attribution and licensing information in the [evaluation data documentation](server/evals/data/olist/README.md).
