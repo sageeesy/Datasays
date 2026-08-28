@@ -495,6 +495,30 @@ Skeleton 将 schema mapping errors 从上一实验的 27/7 个收敛为两次各
 
 **Updated interpretation：**candidate retrieval 不再等同于 mandatory selection，Executive 的 duplicate-candidate coupling 已解除；同时，Review Grain 表明“提供 rejection 字段”不等于模型会使用它。当前剩余问题位于 Planner candidate-decision adoption / structured replan stability，而不是继续放宽 Gate。此次实验没有运行 Code Generator 或完整 benchmark，也没有证明端到端准确率提高。
 
+**Metric instantiation 单案例实验：**只在 Planner prompt 中增加一条通用规则：当 planned metric 与 retrieved candidate 的公式、实体和粒度相同，仅增加查询特定过滤、子群或更窄 population 时，应视为该 candidate 的实例并填写对应 `metric_id`；只有业务含义或公式、实体、粒度实质不同时才 reject。随后固定 `qwen/qwen3.6-flash`、`project_id=olist`，仅运行一次 `review_grain_audit` Planner-only，保留既有最多两次 attempts，artifact 位于 git-ignored 的 `server/evals/results/planner-metric-instantiation-review-grain-20260825.json`。
+
+本次 A1、A2 都未通过 schema validation，且错误相同：`metrics.2.numerator.filters.0.operator` 输出了 schema 不支持的 `gt`；`metrics.2.denominator.aggregation` 输出了 `null`，但 schema 要求 string。因此实验在 schema mapping 层停止，没有得到可供 Gate 检查的真实 LLM Plan；最终 deterministic fallback 仍被 `missing_analysis_scope`、`missing_entity_grain`、`unresolved_metric_candidate` 和 `missing_join_requirement` 拦截。现阶段不能根据 fallback 判断 metric-instantiation 规则有效或无效，也不能声称 `order_count` 已被正确选择。下一步应继续保持单案例与其他变量不变，先做一个最小的 operand/filter schema-mapping 实验，使严格大于整数阈值映射为等价的受支持表达（例如 `> 1` 表达为 `gte 2`），并确保每个 operand 的 `aggregation` 为 string；在获得 schema-valid Plan 后再评估 metric instantiation。
+
+**Schema-mapping guidance follow-up：**下一次单变量实验只强化 Planner 的字段格式说明：列出受支持的 filter operators，将整数条件 `> 1` 明确映射为 `gte 2`，并要求每个 `MetricOperand.aggregation` 都是非空 string、禁止 `null`。固定模型、项目和 case 不变后，A1 首次成为 schema-valid LLM Plan 并真实进入 Gate；其唯一 issue 是 `unresolved_metric_candidate=ecommerce.order_count`，因此既有机制执行了一次 replan。A2 也 schema-valid，按 `order_id` 统计 review rows、筛选 review count > 1 的 ordered steps 表达正确，但它没有将 `orders_with_multiple_reviews` 绑定到 `ecommerce.order_count`，而是显式 reject 该 candidate，理由是 retrieved definition 指向 valid/completed orders，而用户问题关注 review-grain audit。该 rejection 满足当前 decision contract，所以 A2 通过 Gate并得到 `ready_for_code_generation=true`。
+
+这说明 schema-mapping 阻塞已在本次运行中消失，但预设的 metric-instantiation 成功标准没有达到：最终 `metric_ids=[]`、目标 metric 的 `metric_id=null`、`rejected_metrics` 包含 `ecommerce.order_count`。当前失败层已经从 schema mapping 推进到 Planner 对“通用订单计数定义”与“查询特定重复评价订单计数”之间继承关系的业务语义判断；Gate 本身按现有 contract 正常接受了合法 rejection。本次没有继续修改 prompt、Gate 或 retrieval，也没有运行 Code Generator 或完整 benchmark。Artifact 位于 git-ignored 的 `server/evals/results/planner-metric-instantiation-schema-guidance-review-grain-20260825.json`。
+
+**Current 8-case Planner-only checkpoint：**在接受 Review Grain 的 strict metric identity/rejection 作为合法策略后，使用当前实现、固定 `qwen/qwen3.6-flash` 和 `project_id=olist` 将既有 8-case suite 重跑一次。结果为 5 ready、2 legitimate clarifications、1 blocked、2 replans；所有 case 最终都有 schema-valid LLM Plan，没有 deterministic fallback。Executive、Monthly Peak、Payment Structure 和 Customer Identity 正确完成 mandatory candidate selection，Profit 对缺少成本字段的 gross-profit candidate 做了显式 rejection；Review Grain 本轮 replan 后既未 select 也未 reject `order_count`，仍因 `unresolved_metric_candidate` 被阻止，说明 candidate decision adoption 尚不稳定。
+
+Metric Knowledge 与 Olist override 在本轮继续把 Executive/Monthly 的时间绑定到 `order_purchase_timestamp`，并在 Executive 中形成 delivered GMV/AOV、all-orders delivery denominator、payment pre-aggregation 与 left join 的自洽计划。不过 ready 不等于 semantic correctness：Monthly 使用 inner join，可能在计算订单量/AOV denominator 前删除没有 payment match 的 delivered orders；Payment 的 structured operand 用 `payment_sequential >= 2`，而 steps 使用“按 order_id 统计 payment rows > 1”，两种定义依赖额外等价假设；Fact Join Audit 的 JoinSpec 描述 safe pre-aggregated joins，但同时要求计算 naive direct-join inflation，且用 string `"null"` 填充不适用的 operand aggregation；Customer Identity 的 `>1 order` 条件主要留在 calculation/steps，没有完整进入 operands。两个 clarification 也存在停止前的替代口径草案：Channel 把地域当作渠道 proxy，Profit 把 freight 当作成本 proxy；deterministic guard 最终阻止了这些草案进入执行。本轮 artifact 位于 git-ignored 的 `server/evals/results/planner-current-8case-suite-20260825.json`，没有运行 Code Generator 或完整 benchmark。
+
+**Website Project Context experiment：**真实网站此前没有在 QueryRequest 中传递 `project_id`，所以即使 Olist override 已存在，Metric Retrieval 仍以 `project_id=null` 运行。本轮只补齐可选的 website URL context → frontend request → FastAPI QueryRequest → query route → Agent state → Metric Retrieval 链路；测试页面通过显式 `?project_id=olist` 启用项目上下文，不根据文件名推断，未提供参数的普通分析仍保持 domain-only 行为。最终 workflow metadata 记录实际 `project_id`，每个 retrieved metric 的既有 `knowledge_context` 继续记录 effective values、project policies 和 applied override provenance。没有修改 Planner prompt/schema、Gate、Metric Knowledge、Project Override、Skills、Code Generator 或 Validator。
+
+真实网站重新上传两份 Olist 2017 CSV 并只运行一次 `executive_business_snapshot`，run ID 为 `44cbc1d6-9721-47e8-8ac8-12d2afd8523e`。Artifact 与 Trace 均确认 `project_id=olist`；AOV、Payment GMV 和 Delivery Rate 的 effective context 已分别加载 completed-order population、completed-order denominator policy、all-orders delivery denominator，以及 purchase/order time 和 payment pre-aggregation policy。因此 Project Context 链路和 override provenance 已打通。
+
+但 Planner 虽然 schema-valid、Gate ready，仍把 Payment GMV 写成所有 scope orders 的 `sum(payment_value)`，把 AOV 写成所有 scope orders 的支付额除以 distinct orders，没有采用 retrieved override 中的 delivered/completed population。Code Generator随后按这个错误 Plan 汇总全部订单支付，并额外把 Plan 的年末边界 `2017-12-31T23:59:59` 实现成 `<= '2017-12-31'`，漏掉 12 月 31 日午夜后的订单。网站结果表聚合后为 14,411 delivered orders、2,436,736.45 Payment GMV、162.67 AOV、96.20% Delivery Rate，未达到 benchmark reference。Updated interpretation：本轮证明了 project context transport 已解决，但没有证明 override adoption 或端到端准确率提升；第一处业务语义错误仍在 Planner，另有独立的 Plan-to-Code 时间边界偏差。按单变量约束，本轮没有继续修改 Code Generator、Validator 或前端已知展示问题。
+
+**Selected-metric grounding contract experiment：**下一轮只在 Planner prompt 增加通用 grounding contract：一旦 candidate 被选为 `metrics[].metric_id`，其 effective population、denominator 和 resolved time semantics 就是默认业务合同；Planner 必须按 user explicit > effective project semantics > domain default > clarification 的优先级，将它们落实到 metric/operand filters、calculation、steps、time field 和 denominator-preserving join order。没有修改 AnalysisPlan schema、Gate、Retrieval、Metric Knowledge、Olist override、candidate decision、Skills、Code Generator、Validator 或 benchmark。
+
+固定 `qwen/qwen3.6-flash`、`project_id=olist` 后，仅运行一次 `executive_business_snapshot` Planner-only，artifact 位于 git-ignored 的 `server/evals/results/planner-selected-metric-grounding-executive-20260825.json`。Attempt 1 因 `metrics.1.denominator.aggregation=null` schema-invalid；既有 replan 后 Attempt 2 schema-valid、Gate ready。最终 Plan 正确采用了 `order_purchase_timestamp/month`、payment pre-aggregation、left join、AOV delivered numerator/denominator，以及 Delivery Rate 的 all-orders denominator；但 selected `ecommerce.payment_gmv` 仍写成所有 eligible scope orders 的 `sum(payment_value)`，没有 materialize completed-order filter。因此九项预设成功标准只满足八项，不能声称 selected-metric grounding 已解决。
+
+Updated interpretation：继续增加 prompt 规则已出现边际不足。当前第一处失败仍是 Planner grounding/adoption：effective Payment GMV population 已到达 prompt，但分散在 `default_population`、project policy 和 field bindings 中，模型没有稳定编译为结构化 PlanFilter。下一步应优先验证将 effective population、denominator、time binding 和 provenance 预先整理为更直接的 Planner grounding context，而不是继续扩充自然语言规则；本轮按约束停止，没有运行 Code Generator 或完整 benchmark。
+
 ### 正面结果
 
 - 空计划和不完整计划不再进入 Code Generation。
@@ -520,6 +544,85 @@ Skeleton 将 schema mapping errors 从上一实验的 27/7 个收敛为两次各
 ### Compatibility boundary
 
 旧 checkpoint 或 fixture 中的 `intent="other"`、字符串 filters 或近乎空白的 plan 不再满足 V1.5 readiness。当前实现选择明确失败或停止，而不是静默把旧内容转换成可能错误的新语义。历史 metadata 仍可作为记录读取，但不应假定能够重新进入新执行链路。
+
+### Iteration 3 — Single Resolved Metric Contract
+
+Architecture redundancy audit 发现，Planner 同时收到 domain defaults、project override、effective values、field-binding candidates 和完整 `knowledge_context`，因此同一 population、denominator 或 time semantics 仍有多个可重新解释的入口。本轮在现有 Metric Service 内增加 `ResolvedMetricContract` / `ResolvedMetricCandidate` 投影，将 MetricDefinition、显式 Project Override、concept binding 和 effective semantics 解析成单一 Planner-facing contract。原有 compact MetricMatch 与完整 `knowledge_context` 仍保留在 Agent metadata 和 planner-eval artifact 中用于 Trace；Code Generator、Validator、AnalysisPlan、Completeness Gate、Skills 和 U1–U7 未修改。
+
+Olist override 增加了最小结构化 policy contract/reference，使 resolver 可以确定性产出 `order_status == delivered` 和支付表按 `order_id` 预聚合，而不是从自然语言中猜测。三个 unit-level contract 检查确认：Payment GMV 带 delivered population、purchase-time binding 和 payment pre-aggregation；AOV numerator/denominator 共用 completed-order population；Delivery Rate 仅对 numerator 应用 delivered filter，denominator 保留 analysis period 内全部 distinct orders。
+
+固定 `qwen/qwen3.6-flash`、`project_id=olist` 只运行一次 `executive_business_snapshot` Planner-only。Attempt 1 即 schema-valid、Gate ready，未 replan；Planner 选择 Payment GMV、AOV 和 Delivery Rate，正确使用 `order_purchase_timestamp/month`、delivered GMV/AOV population、all-orders delivery denominator、payment-by-order pre-aggregation 和 denominator-preserving left join。Planner metric context 的 JSON 字符数从 raw compact context 的 10,940 减少到 resolved candidate context 的 8,845（约 19%）。Artifact 位于 git-ignored 的 `server/evals/results/planner-rmc-executive-20260826.json`。这是一次单例 Planner 结果，只证明 single resolved contract 在该次运行中被采用，不代表 24-case 准确率提升或 Code Generator/Validator 已遵守新合同。
+
+**RMC Planner stability check：**随后在同一固定模型和 `project_id=olist` 下，对 Executive、Monthly Peak 和 Payment Structure 各独立运行三次 Planner-only，共 9 次。全部 first attempt 均 schema-valid，没有 deterministic fallback；7/9 Gate ready，3/9 发生 replan（全部为 Monthly Peak）。Executive 3/3 使用 delivered Payment GMV、同一 completed-order AOV numerator/denominator、all-orders Delivery Rate denominator、`order_purchase_timestamp/month`、payment-by-order pre-aggregation 和 left join，说明 RMC 对这三个 resolved metric contracts 形成了明显的跨轮稳定性。但是请求中的 standalone delivered-order count 只在 1/3 plan 中单独列出，表明非 Metric Knowledge 覆盖的 ad hoc output 仍有遗漏风险。
+
+Monthly Peak 3/3 使用 purchase time、delivered population 与 payment pre-aggregation，但只有 1/3 ready；其余两轮在两次 schema-valid planning 后仍未对 decision-required `ecommerce.gmv` 做 selected/rejected/clarification 决策，因 `unresolved_metric_candidate` 被 Gate 拦截。唯一 ready 轮使用 inner join，可能在 order-count/AOV denominator 计算前删除无 payment match 的 delivered orders；另两轮使用 left join。因此 time/population 稳定，但 candidate decision 和 baseline-preserving join 仍不稳定。
+
+Payment Structure 3/3 schema-valid 且 ready，也都将 payment-method amount share 表达为 payment-value grain、将 multi-payment rate 表达为先按 `order_id` 统计 payment rows 的 order grain。但三轮都将用户问题中的 delivered-order population 放宽为 orders with payment records。其中一轮在 structured numerator 中使用 `payment_sequential >= 2`，其余两轮只在 calculation/steps 中表达 payment-row count > 1，显示结构化 multi-payment predicate 仍有漂移。根因是这两个 project metric override 当前仍只提供自然语言 population description，没有关联可解析的 population policy filter；RMC 没有编造不存在的结构化语义，Planner 因而稳定地采用了错误的更宽总体。
+
+Updated interpretation：RMC 确实减少了已完整 resolve 指标的 semantic drift，但不会自动修复缺失的 knowledge contract、candidate decision 或 ad hoc requested-output coverage。因此当前已适合开始一个窄范围的 Code Generator adherence 实验，但还不适合宣称 Planner 全面稳定，也不应立即运行完整 24-case benchmark。三轮 artifact 分别位于 git-ignored 的 `server/evals/results/planner-rmc-stability-run{1,2,3}-20260826.json`。
+
+**Executive Code Generator adherence 与 executable-contract 修复：**固定使用已经 schema-valid、Gate Ready 且核心业务语义正确的 Executive AnalysisPlan，第一次只运行 Code Generator + Sandbox 时，生成代码在 population、denominator、purchase-time 边界、payment pre-aggregation、left join、order grain 和 overall/monthly consistency 上均遵守 Plan；但 result dictionary 写成了 `"primary_value": null`。Python 将 `null` 解析为普通变量名，因此既有 `ast.parse()` 语法检查没有拦截，Sandbox 最终以 `NameError` 失败，Validator 正确将 execution 与 structured result 标为 fail。
+
+根因是 Code Generator 和 repair prompt 用 JSON 的 `null` 描述 Python result dictionary，而提取链只有 Python syntax validation，没有 executable literal contract。本轮最小修复将 prompt 改为明确使用 Python `None/True/False`，并在所有 generation/repair 共用的代码提取出口增加 token-level normalization：只转换裸 NAME token `null/true/false`，不修改字符串或注释，随后再次执行 AST parse。直接相关的 30 个 `unittest` 全部通过。
+
+修复后只重跑同一 Executive Code Generator + Sandbox 实验一次，没有调用 Planner、repair 或完整 benchmark。生成代码不再包含裸 JSON literal，Sandbox 成功返回结构化结果和 12 个月趋势数据；全年结果为 14,429 个 delivered orders、2,320,454.39 BRL Payment GMV、160.82 BRL AOV、96.19% Delivery Rate，现有 Validator 8/8 pass。Artifact 位于 git-ignored 的 `server/evals/results/code-adherence-executive-literal-fix-20260826.json`。这证明该单例的 executable-contract 问题已修复，不代表 Code Generator 在其他任务上全面遵循 Plan，也不代表 Validator 已具备通用 semantic validation。非阻塞缺口：月度 dataset 已包含 AOV，但 visualization specs 尚未为 AOV 单独生成图表；本轮没有修改 visualization policy。
+
+**Three-case end-to-end expansion：**Executive 现作为 golden regression case 使用。四个 expected facts 已记录在 `business_benchmark_cases.json`，十项 Plan-to-Code 合同与成功 artifact 已记录在本文和 git-ignored eval artifact；但目前还没有一条自动化测试同时断言 purchase time、完整年度边界、payment pre-aggregation、left join、四个 population/denominator 合同和最终四个 reference 数值。因此当前 golden protection 是 benchmark + artifact + review checklist，而不是完整的 deterministic regression test。本轮没有修改或重跑 Executive。
+
+固定 `qwen/qwen3.6-flash`、`project_id=olist` 后，Monthly Peak、Payment Structure 和 Review Grain 各通过真实 in-process `/api/query` 完整运行一次。没有运行完整 24-case benchmark，也没有修改 Planner、RMC、Gate、Code Generator、Validator、Skills 或 expected values。
+
+| Case | RMC | Plan / Gate | Code / Sandbox / Validator | Final | First failure |
+|---|---|---|---|---|---|
+| `monthly_peak_diagnosis` | Partial：AOV 与 Payment GMV 带 delivered/purchase-time contract；generic GMV 仍是 exact mandatory candidate，且自身缺少 completed population 与 payment pre-aggregation | 两次 plan 均 schema-valid；核心计划采用 delivered、purchase month、payment-by-order pre-aggregation 和 left join，但没有 select/reject/clarify `ecommerce.gmv`；Gate 在一次 replan 后安全停止 | 未生成代码、未运行 Sandbox/Validator；0 repair | 无结果 | Planner candidate-decision instability；generic GMV 与 Payment GMV 的 RMC/retrieval ambiguity 是 contributing factor |
+| `payment_structure_risk` | Incomplete：两个 RMC 都在 description 中提到 Olist valid completed orders，但 `resolved_population.filters=[]`，没有结构化 delivered filter | 用户问题显式要求 delivered，Planner 将该条件写入顶层 filters；amount share 使用 payment amount grain，multi-payment rate 使用先按 `order_id` 统计 payment rows 的 order grain；Gate ready，无 replan | Code 忠实执行 delivered inner join、金额分子/总金额分母和 payment-row-count > 1。初次结果把多个 metric IDs 写成 list，AnalysisResult schema 拒绝；一次 repair 后 Sandbox success、Validator 8/8 pass | 77.92% credit-card amount share、19.21% boleto share、3.45% multi-payment order rate；3/3 facts pass | RMC structured-population coverage gap；最终结果被 user-explicit filter 正确补救。独立工程问题是 multi-metric result 的单值 `metric_id` contract |
+| `review_grain_audit` | Generic `ecommerce.order_count` exact candidate 与本题 ad hoc review metrics 不同；A1 未处置，A2 合法 reject。当前没有 authoritative review-grain metric contract | A2 schema-valid、Gate ready；Plan 以全部 review rows 为 population，明确 row grain 与 order grain 两级计算；1 replan | Code 直接按 reviews 计算 row mean，并按 `order_id` 聚合 review count/order mean；grain transformation 与 weighting-bias explanation 正确。Sandbox success、Validator 8/8 pass、0 repair | 122 duplicate-review orders、4.0689 row mean、4.0696 order mean、-0.0006 delta；benchmark 0/4 facts | Benchmark/task population ambiguity：问题文本没有要求 delivered，但 expected values 使用 delivered-order reviews。若 delivered 是真实合同，当前 Planner/RMC 没有获得该 authority；不能只把差异归因于 Code |
+
+Artifacts 分别位于：`server/evals/results/e2e-expansion-monthly_peak_diagnosis-20260826.json`、`e2e-expansion-payment_structure_risk-20260826.json` 和 `e2e-expansion-review_grain_audit-20260826.json`，均被 Git ignore。
+
+Updated interpretation：项目已经能够在 Payment Structure 中稳定区分 amount grain 与 order grain，Code Generator 也能忠实执行正确 Plan；Review Grain 证明 ad hoc 两级 grain transformation 和 candidate rejection 可以完成，但也证明 Validator 的 high confidence 仍只覆盖 execution/schema/grounding，而不会发现未写进 Plan 的 delivered population reference。Monthly Peak 则表明 candidate decision 仍可能在 Code Generation 前阻断任务。当前不适合用完整 24-case benchmark 作为“已稳定版本”的准确率评估：最小阻塞是 generic/specific metric candidate 的稳定决策、RMC structured population coverage，以及先澄清 Review case 的 delivered population 是否应成为用户可见合同。完整 benchmark 仍可用于诊断，但不应把这些未收敛问题混成一个总分后宣称能力提升或下降。
+
+**Canonical GMV identity and structured payment population follow-up：**本轮只在 Olist Project Override 与 Metric Resolver 层收敛两个产品问题，没有修改 Planner prompt、Gate、Code Generator、Validator 或 benchmark reference。Olist 现在显式将 project-scoped canonical `ecommerce.gmv` 映射到 `ecommerce.payment_gmv`；domain 层两个 metric 仍保持独立。当用户直接询问 generic GMV 时，generic candidate 保留在 trace 中但被 canonical target shadow，Payment GMV 成为 `decision_required` candidate，provenance 明确记录 `project_override`，不依赖 retrieval score 或题目特判。
+
+Payment Structure 的两个 Olist overrides 新增 `population_policies=["valid_completed_order"]`。Resolver 通过既有 policy contract 绑定到 `olist_orders_2017.csv.order_status == delivered`，并在 `resolved_population`、`resolved_numerator` 与 `resolved_denominator` 中均生成同一结构化 filter。这一结果来自 deterministic project policy resolution，不再依赖 Planner 从 natural-language `default_population` 中猜测。
+
+固定 `qwen/qwen3.6-flash` 与 `project_id=olist` 后，Monthly Peak 和 Payment Structure 各独立运行 3 次 Planner-only。6/6 均 schema-valid、Gate Ready、0 replan、0 fallback。Monthly 3/3 均选择 `ecommerce.payment_gmv` + `ecommerce.aov`，generic GMV 3/3 为 non-mandatory shadowed candidate；3/3 使用 `order_purchase_timestamp`、delivered Payment GMV/AOV、payment-by-order pre-aggregation 和 left join。但第 2 轮将 monthly order count 定义为全部 2017 orders，而 GMV/AOV 仍是 delivered population，所以 candidate conflict 已解决，但多指标 population consistency 仍存在 Planner semantic drift。Payment Structure 3/3 均选择 amount-share 与 multi-payment-rate，使用 delivered population，并保持 payment-amount grain 与 order-rate grain 的区分。Artifacts 位于 git-ignored 的 `server/evals/results/canonical-population-planner-run-{1,2,3}-20260826.json`。
+
+Review Grain 本轮保持不变：用户问题与当前产品 knowledge 没有提供 delivered-only authority，而 reference 采用 delivered-order reviews，因此继续标记为 benchmark/spec hidden assumption，不通过修改产品逻辑迎合。根目录 `/data/agent-checkpoints.db*` 也已加入 Git ignore，覆盖 SQLite 主库、`-wal` 和 `-shm`。
+
+**Post-RMC diagnostic baseline（24-case E2E）：**在冻结当前 Planner、RMC、Project Override、Gate、Code Generator、Validator、Skills 与 benchmark scoring 的前提下，固定 `qwen/qwen3.6-flash`，并为全部 Olist 请求显式传入 `project_id=olist`，运行完整 24 cases / 26 turns。首次长任务中断且未形成可复用结果后，使用不修改源码的逐 case wrapper 调用原有 `run_business_eval`，每题独立保存中间结果并汇总为 git-ignored artifact：`server/evals/results/post-rmc-diagnostic-baseline-20260826.json`。本轮是 diagnostic baseline，不是最终准确率验收。
+
+| Metric | Pre-RMC baseline | Post-RMC diagnostic |
+|---|---:|---:|
+| Case pass rate | 4/24 = 16.67% | 3/24 = 12.50% |
+| Fact recall | 46.15% | 31.73% |
+| Business-term coverage | 82.05% | 58.97% |
+| Execution success | 96.15% | 15/26 = 57.69% |
+| Structured-result success | 100% | 13/24 analysis turns = 54.17% |
+| Runtime validation pass | 95.83% | 13/13 executed analyses = 100% |
+| Plan-intent accuracy | 23.53% | 58.82% |
+
+本轮通过的 case 是 `monthly_peak_diagnosis`、`payment_structure_risk` 和 `profit_metric_clarification`。Planner first-attempt schema-valid 为 18/26（69.23%），any-attempt schema-valid 为 20/26（76.92%）；14/26 turns replan（53.85%），1/26 turns repair（3.85%）。11/26 turns 在 Plan Readiness Gate 停止，涉及 9 个 case；这说明安全边界确实阻止了 incomplete plan 继续执行，但 Planner schema/completeness 仍显著降低任务完成率。两个预期 clarification 均正确触发。
+
+四个重点 case 的 updated interpretation：
+
+- `executive_business_snapshot` 的 Plan、生成代码和最终答案均使用 delivered Payment GMV/AOV、all-orders Delivery Rate denominator、purchase time、payment-by-order pre-aggregation 与 left join；最终答案精确包含 14,429、2,320,454.39、160.82 和 96.19%。但 `AnalysisResult.rows` 只包含 12 个按月记录，全年值仅存在于 summary/insights 字符串中。scorer 只能从结构化数值字段取值，误将 11 月数值当作全年结果，造成 0/4 fact recall。这是 requested-output/structured-result contract 与 scorer interface 问题，不是 Executive 计算回归；expected metric IDs 仍要求 generic `ecommerce.gmv`，也与新的 Olist canonical Payment GMV identity 不一致。
+- `monthly_peak_diagnosis` 继续通过，3/3 facts 正确；真实 E2E 使用 purchase month、delivered population、payment pre-aggregation 和 denominator-preserving left join，本轮未观察到此前的 population drift。
+- `payment_structure_risk` 首次完整 baseline 中通过，3/3 facts 正确；resolved delivered population 在 E2E 中生效，代码正确区分 payment-amount grain 与先按 `order_id` 统计 payment rows 的 order grain。
+- `review_grain_audit` 在 A1 因 unresolved `ecommerce.order_count` candidate 被 Gate 拦截，A2 又因两个 operand 的 `aggregation=null` schema-invalid 而停止，未进入 Code Generator。即使执行，reference 的 delivered-only review population 仍未出现在用户问题或 authoritative knowledge 中，因此该 population mismatch 继续标记为 benchmark/spec hidden assumption；当前产品侧首个失败仍是 Planner candidate decision/schema mapping。
+
+失败 case 的第一处 failure layer：
+
+- **Planner / Gate（产品缺陷）：**`fact_table_join_audit`、`review_grain_audit`、`late_delivery_experience_gap`、`category_experience_problem`、`seller_risk_diagnosis`、`fulfillment_action_plan`、`category_portfolio_strategy`、`state_category_followup`、`experience_executive_followup`。Gate 本身不是根因；它暴露了 missing join、unresolved/unretrieved metric、schema failure 或 fallback plan。
+- **Planner semantic correctness（产品缺陷）：**`category_revenue_concentration` 的 category field/denominator，`state_delivery_hotspot` 的 review one-to-many inflation，`seller_governance_strategy` 的 metric/population/grain，以及 `causal_claim_boundary` 的 causal boundary 与 late definition。
+- **Structured output / final protocol（产品或协议缺口）：**`executive_business_snapshot`、`state_revenue_concentration`、`repeat_customer_health` 和 `monthly_decline_decomposition`。这些 case 分别存在全年 aggregate 未作为结构化数值输出、Top-3 aggregate 未输出、repeat numerator 只写进 insight、percent 与 fraction scale 未统一的问题；不能简单归为分析计算错误。
+- **Benchmark/spec ambiguity：**`customer_identity_audit`、`missingness_business_impact` 与 Review 的 delivered-only population 没有充分用户/knowledge authority；`channel_quality_clarification` 正确澄清，但 `2/3=0.666...` 被 `0.67` threshold 判失败。`category_revenue_concentration` 还需要明确 category naming 与 denominator policy。
+- **Final Answer coverage：**`regional_growth_priority` 的数值事实全部通过，但业务术语覆盖只有 2/3，因此 case 未通过。
+
+Updated interpretation：Post-RMC 总通过率低于旧基线，不能直接解释为 RMC 造成能力退化。新 Gate 把原来会继续执行的空洞计划安全停止，同时 Planner schema 稳定性、structured-result coverage 和 scorer/spec 问题共同压低了总分。另一方面，Plan-intent accuracy 从 23.53% 提升至 58.82%，Executive 的四个核心口径已在真实 E2E 中正确闭环，Payment Structure 也从旧基线失败变为通过。这些是局部、可定位的进展，不构成总体准确率提升声明。
+
+当前 top failure layers 是：（1）Planner schema/completeness 与多表 Join 计划；（2）ad hoc 业务问题中的 population、grain、metric 和 causal semantics；（3）Plan/requested outputs 到 `AnalysisResult` 及 scorer 的结构化数值合同。Validator 在 13 个实际执行 case 中 13/13 通过，但其中多数仍未通过 benchmark，证明其覆盖 execution/schema/grounding，而不覆盖 Plan compliance 或业务语义。下一阶段值得开始设计窄范围 Plan Compliance Validator，优先检查 planned metric/output 是否都有具名结构化数值证据、population/filter preservation、Join/pre-aggregation/grain 和 value scale；但 Planner schema/completeness 稳定仍应先于大范围 semantic validator 实现。
+
+在下一次把总分用于版本验收前，应先清理或明确以下 benchmark contract：Review、Customer Identity、Missingness 的 population authority；Channel clarification threshold；Executive 的 canonical metric IDs 与全年 scalar output；Monthly Decline 的 percent/fraction scale；Category Revenue 的 category naming 和 denominator。上述清理应修正 spec/scoring，而不是让产品逻辑迎合隐藏 reference。
 
 ## 9. What We Learned
 

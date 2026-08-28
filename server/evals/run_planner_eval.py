@@ -19,9 +19,10 @@ load_dotenv(SERVER_DIR / ".env")
 
 from app.services.metric_service import (  # noqa: E402
     compact_metric_match,
+    resolved_metric_candidate,
     retrieve_metric_definitions,
 )
-from app.services.plan_service import generate_analysis_plan  # noqa: E402
+from app.services.plan_service import generate_analysis_plan, infer_plan_dataset_usage  # noqa: E402
 from app.services.profile_service import build_dataset_profile, compact_profile  # noqa: E402
 from app.services.skill_service import compact_skill, select_analysis_skills  # noqa: E402
 
@@ -81,48 +82,90 @@ async def run_planner_eval(
                 )
             profiles.append(profile_cache[dataset_id])
 
-        selected_skills = select_analysis_skills(case["question"])
-        skills = [compact_skill(skill) for skill in selected_skills]
-        metric_matches = [
-            compact_metric_match(match)
-            for match in retrieve_metric_definitions(
-                case["question"],
+        turns = case.get("turns") or [{"question": case["question"]}]
+        recent_messages: List[Dict[str, str]] = []
+        for turn_index, turn in enumerate(turns, start=1):
+            question = turn["question"]
+            conversation_context = None
+            if recent_messages:
+                conversation_context = {
+                    "recent_messages": list(recent_messages),
+                    "verified_findings": [],
+                    "source_run_ids": [],
+                }
+            selected_skills = select_analysis_skills(question)
+            skills = [compact_skill(skill) for skill in selected_skills]
+            retrieved = retrieve_metric_definitions(
+                question,
                 profiles,
                 project_id=project_id,
             )
-        ]
+            metric_matches = [compact_metric_match(match) for match in retrieved]
+            resolved_candidates = [resolved_metric_candidate(match) for match in retrieved]
 
-        started = time.perf_counter()
-        plan, metadata = await generate_analysis_plan(
-            question=case["question"],
-            profiles=profiles,
-            metric_matches=metric_matches,
-            skills=skills,
-            model=model,
-        )
-        completeness = metadata.get("completeness") or {}
-        results.append({
-            "case_id": case["id"],
-            "question": case["question"],
-            "datasets": list(case.get("datasets", [])),
-            "selected_skill_ids": [skill["id"] for skill in skills],
-            "retrieved_metric_ids": [match["id"] for match in metric_matches],
-            "retrieved_metrics": metric_matches,
-            "plan": plan.model_dump(mode="json"),
-            "planner": metadata.get("planner"),
-            "model": metadata.get("model"),
-            "attempt_count": metadata.get("attempt_count"),
-            "replanned": bool(metadata.get("replanned")),
-            "attempts": metadata.get("attempts", []),
-            "completeness": completeness,
-            "elapsed_ms": round((time.perf_counter() - started) * 1000, 2),
-        })
+            started = time.perf_counter()
+            outcome = await generate_analysis_plan(
+                question=question,
+                profiles=profiles,
+                metric_matches=resolved_candidates,
+                skills=skills,
+                model=model,
+                conversation_context=conversation_context,
+            )
+            plan = outcome.plan
+            metadata = outcome.metadata
+            completeness = metadata.get("completeness") or {}
+            dataset_usage = (
+                infer_plan_dataset_usage(plan, profiles, resolved_candidates)
+                if plan is not None
+                else None
+            )
+            results.append({
+                "case_id": case["id"],
+                "turn": turn_index,
+                "question": question,
+                "datasets": list(case.get("datasets", [])),
+                "conversation_context": conversation_context,
+                "selected_skill_ids": [skill["id"] for skill in skills],
+                "retrieved_metric_ids": [match["id"] for match in metric_matches],
+                "retrieved_metrics": metric_matches,
+                "resolved_metric_candidates": resolved_candidates,
+                "metric_context_size": {
+                    "raw_chars": len(json.dumps(metric_matches, ensure_ascii=False)),
+                    "resolved_chars": len(json.dumps(resolved_candidates, ensure_ascii=False)),
+                },
+                "plan": (
+                    plan.model_dump(mode="json")
+                    if plan is not None
+                    else outcome.normalized_partial_payload
+                ),
+                "canonical_plan_present": plan is not None,
+                "dataset_usage": dataset_usage,
+                "raw_payload": outcome.raw_payload,
+                "normalized_partial_payload": outcome.normalized_partial_payload,
+                "normalization_actions": [
+                    item.model_dump(mode="json") for item in outcome.normalization_actions
+                ],
+                "validation_errors": outcome.validation_errors,
+                "unresolved_issues": [
+                    item.model_dump(mode="json") for item in outcome.unresolved_issues
+                ],
+                "planner": metadata.get("planner"),
+                "model": metadata.get("model"),
+                "attempt_count": metadata.get("attempt_count"),
+                "replanned": bool(metadata.get("replanned")),
+                "attempts": metadata.get("attempts", []),
+                "completeness": completeness,
+                "elapsed_ms": round((time.perf_counter() - started) * 1000, 2),
+            })
+            recent_messages.append({"role": "user", "content": question})
 
     return {
         "evaluation": "planner_only_v1_5",
         "benchmark": suite.get("benchmark_name"),
         "project_id": project_id,
-        "case_count": len(results),
+        "case_count": len(selected_cases),
+        "turn_count": len(results),
         "summary": {
             "ready_for_code_generation": sum(
                 bool(item["completeness"].get("ready_for_code_generation"))
@@ -138,6 +181,19 @@ async def run_planner_eval(
                 for item in results
             ),
             "replanned": sum(bool(item["replanned"]) for item in results),
+            "first_attempt_raw_schema_valid": sum(
+                bool((item.get("attempts") or [{}])[0].get("raw_schema_valid"))
+                for item in results
+            ),
+            "normalization_recovered": sum(
+                any(bool(attempt.get("normalization_recovered")) for attempt in item.get("attempts", []))
+                for item in results
+            ),
+            "canonical_plan_valid": sum(bool(item["canonical_plan_present"]) for item in results),
+            "fallback": sum(
+                item.get("planner") == "deterministic_incomplete_fallback"
+                for item in results
+            ),
         },
         "cases": results,
     }

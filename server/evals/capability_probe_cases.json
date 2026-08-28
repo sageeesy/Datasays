@@ -1,0 +1,156 @@
+{
+  "version": "1.0.0-probe",
+  "model": "qwen/qwen3.6-flash",
+  "datasets": {
+    "core": "data/capability_probe/core_retail.csv",
+    "statistical": "data/capability_probe/statistical_groups.csv",
+    "classification": "data/capability_probe/classification.csv",
+    "regression": "data/capability_probe/regression.csv",
+    "behavior": "data/capability_probe/behavior_events.csv"
+  },
+  "cases": [
+    {
+      "id": "core_descriptive",
+      "track": "core",
+      "capability": "descriptive_statistics",
+      "difficulty": "easy",
+      "dataset": "core",
+      "question": "Summarize the sales column for all valid rows. Report count, mean, median, minimum, maximum, sample standard deviation, first quartile (Q1), and third quartile (Q3). Return every requested statistic as structured evidence.",
+      "expected_paths": ["count", "mean", "median", "min", "max", "std", "q1", "q3"],
+      "required_columns": ["sales"],
+      "method_tokens": ["median", "quantile", "std"]
+    },
+    {
+      "id": "core_filter_metric",
+      "track": "core",
+      "capability": "filter_conditional_metric",
+      "difficulty": "easy",
+      "dataset": "core",
+      "question": "Filter to rows where member equals yes and region equals East. Report the filtered row count, mean sales, and the filtered row share of all rows. Keep the share as a fraction and return all three facts as structured evidence.",
+      "expected_paths": ["count", "mean_sales", "row_share"],
+      "required_columns": ["member", "region", "sales"],
+      "method_tokens": ["member", "East"]
+    },
+    {
+      "id": "core_groupby",
+      "track": "core",
+      "capability": "groupby_comparison",
+      "difficulty": "medium",
+      "dataset": "core",
+      "question": "Compare regions. For each region report distinct transaction count, total sales, and average sales. Identify the regions with the highest and lowest average sales. Return the grouped table and the two named extrema as structured evidence.",
+      "expected_paths": ["groups", "highest_average_region", "lowest_average_region"],
+      "required_columns": ["transaction_id", "region", "sales"],
+      "method_tokens": ["groupby", "nunique"]
+    },
+    {
+      "id": "core_ranking",
+      "track": "core",
+      "capability": "ranking_top_n",
+      "difficulty": "medium",
+      "dataset": "core",
+      "question": "Rank products by total sales and return the Top 3 and Bottom 3 products with product_id and total_sales. Resolve ties by product_id in ascending alphabetical order. Return both ranked lists as structured evidence.",
+      "expected_paths": ["top3", "bottom3"],
+      "required_columns": ["product_id", "sales"],
+      "method_tokens": ["groupby", "sort_values"]
+    },
+    {
+      "id": "core_distribution",
+      "track": "core",
+      "capability": "distribution_quantile",
+      "difficulty": "medium",
+      "dataset": "core",
+      "question": "Describe the sales distribution using Q1, median, Q3, P90, IQR, and the upper fence Q3 + 1.5*IQR. Count rows strictly above that upper fence. Return every value as structured evidence.",
+      "expected_paths": ["q1", "median", "q3", "p90", "iqr", "upper_fence", "high_value_count"],
+      "required_columns": ["sales"],
+      "method_tokens": ["quantile"]
+    },
+    {
+      "id": "probe_mean_ci",
+      "track": "experimental",
+      "capability": "statistical_mean_ci",
+      "difficulty": "medium",
+      "dataset": "statistical",
+      "question": "Compare outcome between treatment and control. Report both group means, treatment-minus-control mean difference, and a 95% Welch confidence interval for that difference. Explain the direction without making a causal claim. Return the estimates as structured evidence.",
+      "expected_paths": ["control_mean", "treatment_mean", "mean_difference", "ci_low", "ci_high"],
+      "required_columns": ["group", "outcome"],
+      "method_tokens": ["ttest_ind"]
+    },
+    {
+      "id": "probe_hypothesis_effect",
+      "track": "experimental",
+      "capability": "hypothesis_testing",
+      "difficulty": "challenge",
+      "dataset": "statistical",
+      "question": "Test whether mean outcome differs between treatment and control using a two-sided Welch independent-samples t-test. Report the t statistic, p-value, Cohen's d using pooled sample standard deviation, effect direction, and a non-causal conclusion.",
+      "expected_paths": ["welch_t", "p_value", "cohens_d", "direction"],
+      "required_columns": ["group", "outcome"],
+      "method_tokens": ["ttest_ind", "equal_var=False"]
+    },
+    {
+      "id": "probe_correlation",
+      "track": "experimental",
+      "capability": "correlation_association",
+      "difficulty": "medium",
+      "dataset": "statistical",
+      "question": "Measure the linear association between x and outcome using Pearson correlation. Report r, the two-sided p-value, direction, and explicitly state that association does not establish causality.",
+      "expected_paths": ["pearson_r", "p_value", "direction"],
+      "required_columns": ["x", "outcome"],
+      "method_tokens": ["pearsonr"]
+    },
+    {
+      "id": "probe_logistic",
+      "track": "experimental",
+      "capability": "logistic_classification",
+      "difficulty": "challenge",
+      "dataset": "classification",
+      "question": "Build a Logistic Regression classifier for target using feature_1 through feature_6 only; exclude record_id. Use train_test_split(test_size=0.30, random_state=42, stratify=target), StandardScaler fitted on training data, and LogisticRegression(C=1.0, max_iter=1000, solver='lbfgs', random_state=42). Report test accuracy, precision, recall, F1, ROC AUC, and test row count as structured evidence.",
+      "expected_paths": ["accuracy", "precision", "recall", "f1", "roc_auc", "test_rows"],
+      "required_columns": ["feature_1", "feature_2", "feature_3", "feature_4", "feature_5", "feature_6", "target"],
+      "method_tokens": ["LogisticRegression", "StandardScaler", "test_size=0.30", "random_state=42", "stratify"]
+    },
+    {
+      "id": "probe_random_forest",
+      "track": "experimental",
+      "capability": "random_forest_classification",
+      "difficulty": "challenge",
+      "dataset": "classification",
+      "question": "Build a Random Forest classifier for target using feature_1 through feature_6 only; exclude record_id. Use train_test_split(test_size=0.30, random_state=42, stratify=target) and RandomForestClassifier(n_estimators=100, max_depth=5, random_state=42). Report test accuracy, precision, recall, F1, ROC AUC, and test row count as structured evidence.",
+      "expected_paths": ["accuracy", "precision", "recall", "f1", "roc_auc", "test_rows"],
+      "required_columns": ["feature_1", "feature_2", "feature_3", "feature_4", "feature_5", "feature_6", "target"],
+      "method_tokens": ["RandomForestClassifier", "n_estimators=100", "max_depth=5", "random_state=42"]
+    },
+    {
+      "id": "probe_linear_regression",
+      "track": "experimental",
+      "capability": "linear_regression",
+      "difficulty": "challenge",
+      "dataset": "regression",
+      "question": "Fit Linear Regression to predict target from x1, x2, and x3 only; exclude record_id. Use train_test_split(test_size=0.25, random_state=42). Report test R-squared, MAE, RMSE, intercept, each coefficient, and test row count as structured evidence.",
+      "expected_paths": ["r2", "mae", "rmse", "intercept", "coef_x1", "coef_x2", "coef_x3", "test_rows"],
+      "required_columns": ["x1", "x2", "x3", "target"],
+      "method_tokens": ["LinearRegression", "test_size=0.25", "random_state=42"]
+    },
+    {
+      "id": "probe_funnel",
+      "track": "experimental",
+      "capability": "simple_funnel",
+      "difficulty": "challenge",
+      "dataset": "behavior",
+      "question": "Build a user-level ordered funnel view -> add_to_cart -> purchase using event_time. A user reaches a stage only if it occurs after their preceding stage. Report unique-user counts for all stages and view-to-cart, cart-to-purchase, and view-to-purchase conversion rates as fractions.",
+      "expected_paths": ["view", "add_to_cart", "purchase", "view_to_cart_rate", "cart_to_purchase_rate", "view_to_purchase_rate"],
+      "required_columns": ["user_id", "event", "event_time"],
+      "method_tokens": ["user_id", "event_time"]
+    },
+    {
+      "id": "probe_cohort_retention",
+      "track": "experimental",
+      "capability": "simple_cohort_retention",
+      "difficulty": "challenge",
+      "dataset": "behavior",
+      "question": "Create signup-month cohorts at user grain. A user is D7 retained if they have an active event at or after signup_time + 7 days and strictly before signup_time + 8 days. For each cohort report eligible users, retained users, and D7 retention rate as a fraction.",
+      "expected_paths": ["cohorts"],
+      "required_columns": ["user_id", "event", "event_time"],
+      "method_tokens": ["signup", "active", "Timedelta"]
+    }
+  ]
+}

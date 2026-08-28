@@ -1,0 +1,171 @@
+{
+  "metadata": {
+    "seed": 20260827,
+    "datasets": {
+      "core": "data/capability_probe/core_retail.csv",
+      "statistical": "data/capability_probe/statistical_groups.csv",
+      "classification": "data/capability_probe/classification.csv",
+      "regression": "data/capability_probe/regression.csv",
+      "behavior": "data/capability_probe/behavior_events.csv"
+    }
+  },
+  "core_descriptive": {
+    "count": 240,
+    "mean": 101.86583333333333,
+    "median": 102.0,
+    "min": 46.6,
+    "max": 158.0,
+    "std": 23.673302922684385,
+    "q1": 85.1,
+    "q3": 118.9
+  },
+  "core_filter_metric": {
+    "count": 40,
+    "mean_sales": 121.205,
+    "row_share": 0.16666666666666666
+  },
+  "core_groupby": {
+    "groups": [
+      {
+        "region": "East",
+        "transaction_count": 60,
+        "total_sales": 6937.8,
+        "average_sales": 115.63000000000001
+      },
+      {
+        "region": "North",
+        "transaction_count": 60,
+        "total_sales": 6394.4,
+        "average_sales": 106.57333333333332
+      },
+      {
+        "region": "South",
+        "transaction_count": 60,
+        "total_sales": 5107.2,
+        "average_sales": 85.11999999999999
+      },
+      {
+        "region": "West",
+        "transaction_count": 60,
+        "total_sales": 6008.4,
+        "average_sales": 100.14
+      }
+    ],
+    "highest_average_region": "East",
+    "lowest_average_region": "South"
+  },
+  "core_ranking": {
+    "top3": [
+      {
+        "product_id": "P07",
+        "total_sales": 2612.6
+      },
+      {
+        "product_id": "P01",
+        "total_sales": 2429.2
+      },
+      {
+        "product_id": "P04",
+        "total_sales": 2319.8
+      }
+    ],
+    "bottom3": [
+      {
+        "product_id": "P06",
+        "total_sales": 1462.4
+      },
+      {
+        "product_id": "P02",
+        "total_sales": 1659.4
+      },
+      {
+        "product_id": "P12",
+        "total_sales": 1745.8
+      }
+    ]
+  },
+  "core_distribution": {
+    "q1": 85.1,
+    "median": 102.0,
+    "q3": 118.9,
+    "p90": 132.6,
+    "iqr": 33.80000000000001,
+    "upper_fence": 169.60000000000002,
+    "high_value_count": 0
+  },
+  "probe_mean_ci": {
+    "control_mean": 50.005664375,
+    "treatment_mean": 53.30791705833333,
+    "mean_difference": 3.3022526833333288,
+    "ci_low": 1.2968776740879728,
+    "ci_high": 5.307627692578684,
+    "method": "Welch confidence interval"
+  },
+  "probe_hypothesis_effect": {
+    "welch_t": 3.2444625137873206,
+    "p_value": 0.0013508538116047066,
+    "cohens_d": 0.41885830944308483,
+    "direction": "treatment_higher"
+  },
+  "probe_correlation": {
+    "pearson_r": 0.3566682067640177,
+    "p_value": 1.3104574065184777e-08,
+    "direction": "positive"
+  },
+  "probe_logistic": {
+    "accuracy": 0.7777777777777778,
+    "precision": 0.8166666666666667,
+    "recall": 0.7424242424242424,
+    "f1": 0.7777777777777778,
+    "roc_auc": 0.8702020202020201,
+    "test_rows": 126
+  },
+  "probe_random_forest": {
+    "accuracy": 0.753968253968254,
+    "precision": 0.7611940298507462,
+    "recall": 0.7727272727272727,
+    "f1": 0.7669172932330827,
+    "roc_auc": 0.8383838383838383,
+    "test_rows": 126
+  },
+  "probe_linear_regression": {
+    "r2": 0.8960117607346033,
+    "mae": 2.4423702002903243,
+    "rmse": 2.959634435656322,
+    "intercept": 12.115445818814027,
+    "coef_x1": 2.77024516533842,
+    "coef_x2": -1.5547253218011818,
+    "coef_x3": 4.230530359971794,
+    "test_rows": 90
+  },
+  "probe_funnel": {
+    "view": 120,
+    "add_to_cart": 96,
+    "purchase": 64,
+    "view_to_cart_rate": 0.8,
+    "cart_to_purchase_rate": 0.6666666666666666,
+    "view_to_purchase_rate": 0.5333333333333333
+  },
+  "probe_cohort_retention": {
+    "cohorts": [
+      {
+        "cohort_month": "2025-01",
+        "eligible_users": 40,
+        "retained_users": 20,
+        "retention_rate": 0.5
+      },
+      {
+        "cohort_month": "2025-02",
+        "eligible_users": 40,
+        "retained_users": 13,
+        "retention_rate": 0.325
+      },
+      {
+        "cohort_month": "2025-03",
+        "eligible_users": 40,
+        "retained_users": 10,
+        "retention_rate": 0.25
+      }
+    ]
+  }
+}
