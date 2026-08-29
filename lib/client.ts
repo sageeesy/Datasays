@@ -86,6 +86,19 @@ export interface VisualizationSpec {
   upper?: string;
 }
 
+export interface ResultEvidence {
+  plan_metric_key?: string | null;
+  kind: 'scalar' | 'dataset';
+  value?: string | number | boolean | null;
+  value_scale?: 'raw' | 'fraction' | 'percent' | null;
+  unit?: string | null;
+  dataset_id?: string | null;
+  value_field?: string | null;
+  dimension_fields: string[];
+  coordinates: Record<string, string | number | boolean | null>;
+  label?: string | null;
+}
+
 export interface AnalysisResult {
   answer_type: 'number' | 'table' | 'text';
   primary_value?: string | number | boolean | null;
@@ -98,6 +111,7 @@ export interface AnalysisResult {
   insights?: string[];
   datasets?: VisualizationDataset[];
   visualizations?: VisualizationSpec[];
+  evidence?: ResultEvidence[];
 }
 
 export interface ResponseData {
@@ -113,6 +127,7 @@ export interface ResponseData {
   metadata?: {
     agent_mode?: boolean;
     agent_framework?: string;
+    project_id?: string | null;
     agent_steps?: AgentStep[];
     selected_skills?: Array<{
       id?: string;
