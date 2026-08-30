@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DataSays · 决策简报</title>
+  <style>
+    * { box-sizing:border-box; }
+    :root { --ink:#171717; --muted:#666b72; --paper:#ffffff; --soft:#f2f4f7; --blue:#2458d8; --coral:#e45b45; --green:#18785c; --rule:#d8dce1; }
+    body { margin:0; background:#e9ebee; color:var(--ink); font-family:"Helvetica Neue", "PingFang SC", system-ui, sans-serif; }
+    button, summary { font:inherit; }
+    .page { width:min(1160px, calc(100% - 32px)); min-height:calc(100vh - 32px); margin:16px auto; background:var(--paper); box-shadow:0 16px 48px rgba(17,24,39,.12); }
+    .masthead { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:18px 34px; border-bottom:1px solid var(--ink); }
+    .brand { font-weight:900; }
+    .brand span { color:var(--blue); }
+    .masthead nav { display:flex; gap:20px; color:#646a70; font-size:11px; }
+    .masthead .state { padding:5px 8px; border-radius:3px; background:#eaf6f1; color:var(--green); font-size:10px; font-weight:800; }
+    .lead { display:grid; grid-template-columns:1.5fr .65fr; gap:58px; padding:42px 54px 34px; }
+    h1 { max-width:760px; margin:0; font-family:Georgia, "Times New Roman", serif; font-size:52px; font-weight:500; line-height:1.03; letter-spacing:0; }
+    .deck { max-width:690px; margin:18px 0 0; color:#555b61; font-size:14px; line-height:1.65; }
+    .brief-meta { align-self:end; padding-top:18px; border-top:3px solid var(--coral); color:#6b7177; font-size:11px; line-height:1.7; }
+    .brief-meta b { color:var(--ink); }
+    .register { display:grid; grid-template-columns:repeat(4,1fr); margin:0 34px; border-top:1px solid var(--ink); border-bottom:1px solid var(--ink); }
+    .stat { min-height:118px; padding:18px 20px; }
+    .stat + .stat { border-left:1px solid var(--rule); }
+    .stat span { display:block; min-height:30px; color:#676e75; font-size:10px; line-height:1.35; text-transform:uppercase; }
+    .stat strong { display:block; margin-top:6px; font-family:Georgia, "Times New Roman", serif; font-size:29px; font-weight:500; letter-spacing:0; }
+    .stat small { color:var(--green); font-size:9px; font-weight:800; }
+    .story { display:grid; grid-template-columns:minmax(0,1.55fr) .7fr; gap:36px; padding:38px 54px 20px; }
+    .figure-head { display:flex; align-items:flex-end; justify-content:space-between; gap:20px; margin-bottom:12px; }
+    h2 { margin:0; font-family:Georgia,serif; font-size:24px; font-weight:500; }
+    .figure-head p { margin:0; color:#747a80; font-size:10px; }
+    .plot { position:relative; border-top:1px solid var(--ink); border-bottom:1px solid var(--rule); }
+    svg { display:block; width:100%; height:310px; }
+    .axis { stroke:#c6cbd0; stroke-width:1; }
+    .grid { stroke:#e7e9ec; stroke-width:1; }
+    .bar { fill:#dce5fb; }
+    .bar.peak { fill:var(--blue); }
+    .rate { fill:none; stroke:var(--coral); stroke-width:2; }
+    .dot { fill:var(--coral); }
+    .svg-label { fill:#777d83; font-size:10px; }
+    .svg-note { fill:var(--blue); font-size:10px; font-weight:800; }
+    .caption { display:flex; justify-content:space-between; gap:20px; padding:10px 0; color:#6a7076; font-size:9px; line-height:1.5; }
+    .insights { border-top:3px solid var(--blue); }
+    .insights h3 { margin:14px 0 16px; font-size:12px; text-transform:uppercase; }
+    .insight { display:grid; grid-template-columns:28px 1fr; gap:8px; padding:13px 0; border-top:1px solid var(--rule); }
+    .insight b { color:var(--blue); font-family:Georgia,serif; font-size:20px; font-weight:500; }
+    .insight p { margin:0; color:#4e555b; font-size:11px; line-height:1.55; }
+    .evidence-band { display:grid; grid-template-columns:1.2fr .8fr; gap:38px; margin-top:22px; padding:28px 54px 34px; background:var(--soft); }
+    .evidence-band h2 { font-size:20px; }
+    .evidence-band > div > p { max-width:620px; margin:8px 0 16px; color:#656c73; font-size:11px; line-height:1.55; }
+    details { border-top:1px solid #bbc1c7; }
+    details:last-child { border-bottom:1px solid #bbc1c7; }
+    summary { padding:11px 0; cursor:pointer; font-size:11px; font-weight:800; list-style:none; }
+    summary::after { content:"View +"; float:right; color:var(--blue); font-size:9px; }
+    details[open] summary::after { content:"Close -"; }
+    .detail { padding:0 0 12px; color:#5f666d; font-size:10px; line-height:1.6; }
+    .proof { display:grid; grid-template-columns:1fr auto; gap:8px 16px; align-self:start; padding-top:4px; font-size:10px; }
+    .proof span { padding:8px 0; border-bottom:1px solid #c8cdd2; }
+    .proof b { align-self:center; color:var(--green); font-size:9px; }
+    .foot { padding:0 54px 24px; color:#8a8f94; font-size:9px; }
+    @media (max-width:760px) {
+      .page { width:100%; min-height:100vh; margin:0; box-shadow:none; }
+      .masthead { padding:14px 18px; }
+      .masthead nav { display:none; }
+      .lead { display:block; padding:30px 22px 24px; }
+      h1 { font-size:40px; }
+      .brief-meta { margin-top:24px; }
+      .register { grid-template-columns:repeat(2,1fr); margin:0 14px; }
+      .stat:nth-child(3) { border-left:0; border-top:1px solid var(--rule); }
+      .stat:nth-child(4) { border-top:1px solid var(--rule); }
+      .story { display:block; padding:30px 22px; }
+      .insights { margin-top:28px; }
+      .evidence-band { display:block; padding:28px 22px; }
+      .proof { margin-top:24px; }
+      .foot { padding:0 22px 22px; }
+    }
+  </style>
+</head>
+<body>
+  <article class="page">
+    <header class="masthead"><div class="brand">Data<span>Says</span></div><nav><span>分析</span><span>数据</span><span>方法</span><span>附录</span></nav><span class="state">执行与证据检查通过</span></header>
+
+    <section class="lead">
+      <div><h1>订单扩张推动 2017 年交易规模，履约表现维持稳定</h1><p class="deck">全年 14,429 个订单完成交付，Payment GMV 达到 R$2.32M。第四季度贡献显著增加，而 AOV 相对稳定，说明规模变化主要来自订单量。</p></div>
+      <aside class="brief-meta"><b>2017 年经营概览</b><br>数据：Olist orders + payments<br>时间：purchase event<br>分析单元：order_id</aside>
+    </section>
+
+    <section class="register" aria-label="核心指标">
+      <div class="stat"><span>已交付订单<br>Delivered orders</span><strong>14,429</strong><small>2017 全年</small></div>
+      <div class="stat"><span>Payment GMV<br>Completed population</span><strong>R$2.32M</strong><small>已交付口径</small></div>
+      <div class="stat"><span>Average order value<br>AOV</span><strong>R$160.82</strong><small>同一总体</small></div>
+      <div class="stat"><span>Delivery rate<br>All-order baseline</span><strong>96.19%</strong><small>14,429 / 15,000</small></div>
+    </section>
+
+    <section class="story">
+      <figure style="margin:0">
+        <div class="figure-head"><h2>月度规模与履约</h2><p>柱：Payment GMV · 线：Delivery Rate</p></div>
+        <div class="plot">
+          <svg viewBox="0 0 760 310" role="img" aria-label="2017年Payment GMV柱状图与交付率折线图">
+            <line class="axis" x1="36" y1="270" x2="736" y2="270" /><line class="grid" x1="36" y1="74" x2="736" y2="74" /><line class="grid" x1="36" y1="140" x2="736" y2="140" /><line class="grid" x1="36" y1="205" x2="736" y2="205" />
+            <g><rect class="bar" x="50" y="246" width="34" height="24" /><rect class="bar" x="106" y="209" width="34" height="61" /><rect class="bar" x="162" y="181" width="34" height="89" /><rect class="bar" x="218" y="192" width="34" height="78" /><rect class="bar" x="274" y="144" width="34" height="126" /><rect class="bar" x="330" y="167" width="34" height="103" /><rect class="bar" x="386" y="142" width="34" height="128" /><rect class="bar" x="442" y="129" width="34" height="141" /><rect class="bar" x="498" y="113" width="34" height="157" /><rect class="bar" x="554" y="96" width="34" height="174" /><rect class="bar peak" x="610" y="10" width="34" height="260" /><rect class="bar" x="666" y="83" width="34" height="187" /></g>
+            <path class="rate" d="M67 93 L123 111 L179 73 L235 50 L291 34 L347 26 L403 38 L459 28 L515 19 L571 27 L627 29 L683 16" />
+            <g><circle class="dot" cx="67" cy="93" r="3"/><circle class="dot" cx="123" cy="111" r="3"/><circle class="dot" cx="179" cy="73" r="3"/><circle class="dot" cx="235" cy="50" r="3"/><circle class="dot" cx="291" cy="34" r="3"/><circle class="dot" cx="347" cy="26" r="3"/><circle class="dot" cx="403" cy="38" r="3"/><circle class="dot" cx="459" cy="28" r="3"/><circle class="dot" cx="515" cy="19" r="3"/><circle class="dot" cx="571" cy="27" r="3"/><circle class="dot" cx="627" cy="29" r="3"/><circle class="dot" cx="683" cy="16" r="3"/></g>
+            <g class="svg-label"><text x="54" y="289">01</text><text x="110" y="289">02</text><text x="166" y="289">03</text><text x="222" y="289">04</text><text x="278" y="289">05</text><text x="334" y="289">06</text><text x="390" y="289">07</text><text x="446" y="289">08</text><text x="502" y="289">09</text><text x="558" y="289">10</text><text x="614" y="289">11</text><text x="670" y="289">12</text></g>
+            <text class="svg-note" x="588" y="24">11 月 R$394.76K</text>
+          </svg>
+        </div>
+        <figcaption class="caption"><span>金额仅包含已交付订单；支付记录先按订单聚合。</span><span>交付率分母保留 2017 全部订单。</span></figcaption>
+      </figure>
+
+      <aside class="insights"><h3>关键发现</h3><div class="insight"><b>1</b><p>11 月 GMV 达到全年峰值，第四季度交易规模明显高于年初。</p></div><div class="insight"><b>2</b><p>3 月后交付率稳定在较高区间，规模增长未伴随明显履约恶化。</p></div><div class="insight"><b>3</b><p>AOV 相对稳定，因此交易规模提升主要由订单数量增长贡献。</p></div></aside>
+    </section>
+
+    <section class="evidence-band">
+      <div><h2>这份结论为什么可信</h2><p>系统不把“代码能运行”当作“分析正确”。每个重要事实都绑定到计划指标、总体、字段和机器可读 Evidence。</p><details><summary>查看分析依据</summary><div class="detail">Payment GMV 与 AOV 使用 delivered population；Delivery Rate 使用 2017 全部订单作为 denominator；payments 在 join 前按 order_id 聚合。</div></details><details><summary>查看完整执行轨迹</summary><div class="detail">Dataset profile → Metric grounding → AnalysisPlan → Readiness Gate → Python sandbox → Structured Evidence → Validation。</div></details></div>
+      <div class="proof"><span>Python 执行</span><b>通过</b><span>计划指标 Evidence</span><b>4 / 4</b><span>引用字段</span><b>存在</b><span>总体与分母</span><b>可追踪</b></div>
+    </section>
+    <footer class="foot">这些检查提高结果的可追踪性与可复现性，但不代表系统能够独立证明所有业务语义绝对正确。</footer>
+  </article>
+</body>
+</html>

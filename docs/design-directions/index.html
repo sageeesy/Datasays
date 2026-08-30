@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DataSays Visual Direction Lab</title>
+  <style>
+    * { box-sizing: border-box; }
+    :root { color-scheme: light; font-family: "Avenir Next", "PingFang SC", system-ui, sans-serif; }
+    body { margin: 0; background: #eef0f3; color: #15171a; }
+    header { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 18px 24px; border-bottom: 1px solid #cfd3d8; background: rgba(255,255,255,.96); }
+    h1 { margin: 0; font-size: 24px; letter-spacing: 0; }
+    header p { margin: 3px 0 0; color: #646b73; font-size: 12px; }
+    .legend { display: flex; gap: 16px; color: #555d66; font-size: 12px; white-space: nowrap; }
+    .strip { display: grid; grid-template-columns: repeat(4, 410px); gap: 16px; min-width: 1688px; padding: 18px; }
+    .concept { overflow: hidden; border: 1px solid #c9ced4; border-radius: 8px; background: #fff; box-shadow: 0 8px 24px rgba(25,30,35,.08); }
+    .concept-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 58px; padding: 10px 12px; border-bottom: 1px solid #dfe2e6; }
+    .concept-head strong { display: block; font-size: 13px; }
+    .concept-head span { color: #737b84; font-size: 11px; }
+    .concept-head a { color: #1d4ed8; font-size: 12px; font-weight: 700; text-decoration: none; }
+    .viewport { position: relative; width: 408px; height: 264px; overflow: hidden; background: #ddd; }
+    iframe { width: 1280px; height: 820px; border: 0; transform: scale(.31875); transform-origin: top left; pointer-events: none; }
+    .notes { padding: 12px; border-top: 1px solid #e4e6e9; color: #4f5660; font-size: 11px; line-height: 1.55; }
+    .notes b { color: #171a1e; }
+    @media (max-width: 800px) {
+      header { align-items: flex-start; flex-direction: column; }
+      .legend { white-space: normal; }
+      .strip { grid-template-columns: repeat(4, 350px); min-width: 1448px; }
+      .viewport { width: 348px; height: 226px; }
+      iframe { transform: scale(.2718); }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>DataSays · Visual Direction Lab</h1>
+      <p>同一份 2017 年经营概览，四种完全不同的 Evidence-first 界面逻辑</p>
+    </div>
+    <div class="legend"><span>固定数据</span><span>静态 Demo</span><span>不连接后端</span></div>
+  </header>
+  <main class="strip" aria-label="四套设计方向横向对比">
+    <section class="concept">
+      <div class="concept-head"><div><strong>A · 审计底稿</strong><span>Ledger / working paper</span></div><a href="01-ledger.html" target="_blank">单独打开</a></div>
+      <div class="viewport"><iframe src="01-ledger.html" title="审计底稿方向"></iframe></div>
+      <div class="notes"><b>先核对，再解释。</b> 指标像账目逐行对齐，定义、总体和状态始终同屏。</div>
+    </section>
+    <section class="concept">
+      <div class="concept-head"><div><strong>B · 经营信号台</strong><span>Signal bench / control room</span></div><a href="02-signal.html" target="_blank">单独打开</a></div>
+      <div class="viewport"><iframe src="02-signal.html" title="经营信号台方向"></iframe></div>
+      <div class="notes"><b>先看波形，再定位证据。</b> 月度趋势占据主视野，指标是可切换的测量通道。</div>
+    </section>
+    <section class="concept">
+      <div class="concept-head"><div><strong>C · 决策简报</strong><span>Editorial decision brief</span></div><a href="03-brief.html" target="_blank">单独打开</a></div>
+      <div class="viewport"><iframe src="03-brief.html" title="决策简报方向"></iframe></div>
+      <div class="notes"><b>先读结论，再追脚注。</b> 用报告式阅读路径连接指标、趋势、关键发现和依据。</div>
+    </section>
+    <section class="concept">
+      <div class="concept-head"><div><strong>D · 证据工作台</strong><span>Analyst workbench</span></div><a href="04-workbench.html" target="_blank">单独打开</a></div>
+      <div class="viewport"><iframe src="04-workbench.html" title="证据工作台方向"></iframe></div>
+      <div class="notes"><b>对话、结果、依据并行。</b> 面向高频分析人员，把 Chat 保留在工作流而非最终答案中心。</div>
+    </section>
+  </main>
+</body>
+</html>

@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DataSays · 04B Professional Analyst</title>
+  <link rel="stylesheet" href="shared.css" />
+  <style>
+    :root { --ink:#17211d; --muted:#64706a; --line:#cdd5d0; --soft:#eef1ef; --paper:#fff; --green:#176f58; --blue:#315f9f; --amber:#ad6c1e; }
+    body { color:var(--ink); background:#e9ecea; }
+    .shell { display:grid; grid-template-columns:226px minmax(660px,1fr) 276px; grid-template-rows:54px 34px minmax(0,1fr); height:100vh; }
+    .top { grid-column:1/-1; display:flex; align-items:center; gap:26px; padding:0 16px; border-bottom:1px solid var(--line); background:#fff; }
+    .top nav { display:flex; gap:6px; font-size:10px; }
+    .top nav span { padding:7px 9px; color:var(--muted); }
+    .top nav .active { border-radius:4px; background:#e9f1ed; color:var(--green); font-weight:800; }
+    .model { margin-left:auto; color:var(--muted); font-size:9px; }
+    .crumb { grid-column:1/-1; display:flex; align-items:center; gap:8px; padding:0 16px; border-bottom:1px solid var(--line); background:#f7f8f7; color:var(--muted); font-size:9px; }
+    .crumb b { color:var(--ink); }
+    .left { display:flex; min-height:0; flex-direction:column; overflow:auto; border-right:1px solid var(--line); background:#f5f7f5; }
+    .left-section { padding:15px 14px; border-bottom:1px solid var(--line); }
+    .left h2, .right h2 { margin:0; font-size:11px; }
+    .label { margin:0 0 8px; color:#75807a; font-size:8px; font-weight:800; text-transform:uppercase; }
+    .source { display:grid; grid-template-columns:20px 1fr auto; gap:8px; align-items:start; padding:8px 0; font-size:9px; }
+    .source-icon { display:grid; place-items:center; width:18px; height:20px; border:1px solid #b8c3bc; border-radius:3px; color:var(--green); font-size:8px; font-weight:900; }
+    .source b { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .source small { display:block; margin-top:3px; color:var(--muted); font-size:8px; }
+    .source > span:last-child { color:var(--muted); font-size:8px; }
+    .analysis-link { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 0; color:var(--muted); font-size:9px; }
+    .analysis-link.active { color:var(--ink); font-weight:800; }
+    .analysis-link.active::after { content:""; width:5px; height:5px; border-radius:50%; background:var(--green); }
+    .ask { margin:auto 12px 12px; padding:9px 10px; border:1px solid #b8c2bc; border-radius:5px; background:#fff; }
+    .ask b { display:block; color:#303c36; font-size:9px; }
+    .ask span { display:flex; justify-content:space-between; margin-top:7px; color:var(--muted); font-size:8px; }
+    .center { overflow:auto; background:#fff; }
+    .document { max-width:1020px; margin:0 auto; padding:27px 28px 70px; }
+    .head { display:flex; align-items:flex-start; justify-content:space-between; gap:24px; padding-bottom:16px; border-bottom:1px solid var(--line); }
+    h1 { margin:0; font-size:24px; font-weight:720; }
+    .head p { margin:6px 0 0; color:var(--muted); font-size:10px; line-height:1.5; }
+    .kpis { display:grid; grid-template-columns:repeat(4,1fr); border-bottom:1px solid var(--line); }
+    .kpi { padding:14px 13px 15px 0; }
+    .kpi + .kpi { padding-left:15px; border-left:1px solid #e0e5e2; }
+    .kpi span { display:block; color:var(--muted); font-size:8px; }
+    .kpi strong { display:block; margin-top:5px; font-size:20px; }
+    .analysis-grid { display:grid; grid-template-columns:minmax(0,1.55fr) 238px; gap:22px; margin-top:21px; }
+    .section-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; }
+    .section-head h2 { margin:0; font-size:12px; }
+    .metric-switch { display:flex; gap:12px; color:var(--muted); font-size:8px; }
+    .metric-switch b { padding-bottom:4px; border-bottom:1px solid var(--green); color:var(--green); }
+    .chart { color:var(--green); }
+    .chart-svg { height:240px; }
+    .axis-note { display:flex; justify-content:space-between; margin-top:4px; color:var(--muted); font-size:8px; }
+    .findings { border-top:1px solid var(--ink); }
+    .finding { padding:11px 0; border-bottom:1px solid var(--line); }
+    .finding b { display:block; margin-bottom:4px; color:var(--amber); font-size:8px; }
+    .finding p { margin:0; color:#3f4a45; font-size:9px; line-height:1.5; }
+    .table-wrap { margin-top:22px; }
+    table { width:100%; border-collapse:collapse; font-size:8px; }
+    th { padding:7px 8px; border-top:1px solid var(--ink); border-bottom:1px solid var(--line); background:#f4f6f4; color:var(--muted); text-align:right; }
+    th:first-child, td:first-child { text-align:left; }
+    td { padding:8px; border-bottom:1px solid #e2e6e3; text-align:right; font-variant-numeric:tabular-nums; }
+    .followup { display:none; margin-top:32px; padding-top:20px; border-top:1px solid var(--ink); }
+    body[data-state="3"] .followup { display:block; }
+    .added { margin-bottom:7px; color:var(--green); font-size:8px; font-weight:800; }
+    .followup h2 { margin:0; font-size:17px; }
+    .followup p { margin:6px 0 15px; color:var(--muted); font-size:9px; }
+    .driver-table td:nth-child(2), .driver-table td:nth-child(3) { font-weight:800; }
+    .driver-conclusion { margin-top:14px; padding:11px 0; border-top:1px solid var(--line); border-bottom:1px solid var(--line); color:#334039; font-size:10px; line-height:1.6; }
+    .right { overflow:auto; border-left:1px solid var(--line); background:#f8faf8; }
+    .inspector-head { padding:16px 15px 13px; border-bottom:1px solid var(--line); }
+    .inspector-head p { margin:4px 0 0; color:var(--muted); font-size:8px; }
+    .inspect-tabs { display:flex; gap:14px; padding:0 15px; border-bottom:1px solid var(--line); color:var(--muted); font-size:8px; }
+    .inspect-tabs span { padding:9px 0 7px; }
+    .inspect-tabs .active { border-bottom:2px solid var(--green); color:var(--ink); font-weight:800; }
+    .properties { padding:8px 15px 13px; }
+    .property { display:grid; grid-template-columns:72px 1fr; gap:9px; padding:8px 0; border-bottom:1px solid #e1e5e2; font-size:8px; line-height:1.45; }
+    .property dt { color:var(--muted); }
+    .property dd { margin:0; overflow-wrap:anywhere; }
+    .property code { color:var(--blue); font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:8px; }
+    .check-row { display:flex; align-items:center; justify-content:space-between; padding:10px 15px; border-top:1px solid var(--line); border-bottom:1px solid var(--line); font-size:8px; }
+    .check-row b { color:var(--green); }
+    details { margin:0 15px; border-bottom:1px solid var(--line); }
+    summary { padding:10px 0; list-style:none; font-size:8px; font-weight:750; }
+    summary::after { content:"+"; float:right; }
+    .details-body { padding:0 0 10px; color:var(--muted); font-size:8px; line-height:1.5; }
+    .inspector-followup { display:none; }
+    body[data-state="3"] .inspector-overview { display:none; }
+    body[data-state="3"] .inspector-followup { display:block; }
+    @media (max-width:760px) {
+      .shell { display:block; height:auto; }
+      .top { position:sticky; top:0; z-index:10; height:54px; }
+      .top nav, .model, .crumb { display:none; }
+      .left { border-right:0; border-bottom:1px solid var(--line); }
+      .left-section { display:none; }
+      .ask { margin:12px; }
+      .document { padding:22px 14px 76px; }
+      .head { display:block; }
+      .verified { margin-top:10px; }
+      .kpis { grid-template-columns:repeat(2,1fr); }
+      .kpi:nth-child(3) { padding-left:0; border-top:1px solid var(--line); border-left:0; }
+      .kpi:nth-child(4) { border-top:1px solid var(--line); }
+      .analysis-grid { grid-template-columns:1fr; }
+      .chart-svg { height:210px; }
+      .right { border-top:1px solid var(--line); border-left:0; }
+    }
+  </style>
+</head>
+<body data-state="2">
+  <div class="demo-state"><button data-state-button="2" aria-pressed="true">State 2 · Overview</button><button data-state-button="3" aria-pressed="false">State 3 · Follow-up</button></div>
+  <div class="shell">
+    <header class="top"><div class="brand"><span class="brand-mark">D</span>DataSays</div><nav><span class="active">可信分析</span><span>对比实验</span><span>数据看板</span></nav><div class="model">PROJECT · Olist &nbsp; MODEL · Qwen3.6 Flash</div></header>
+    <div class="crumb"><span>Workspaces</span><span>/</span><b>2017 经营分析</b><span>/</span><span>2017 Overview</span></div>
+    <aside class="left">
+      <div class="left-section"><p class="label">Data sources</p><div class="source"><span class="source-icon">O</span><div><b>olist_orders_2017.csv</b><small>15,015 rows · order grain</small></div><span>7 fields</span></div><div class="source"><span class="source-icon">P</span><div><b>olist_payments_2017.csv</b><small>16,087 rows · payment grain</small></div><span>5 fields</span></div></div>
+      <div class="left-section"><p class="label">Analyses</p><div class="analysis-link active">2017 Overview</div><div class="analysis-link followup-only">November diagnosis</div></div>
+      <div class="left-section"><p class="label">Active definitions</p><div class="analysis-link">Payment GMV · delivered</div><div class="analysis-link">AOV · delivered</div><div class="analysis-link">Delivery Rate · all orders</div></div>
+      <div class="ask"><b>Ask DataSays about this analysis…</b><span><span>2 datasets · 2017 Overview</span><span>Run ↵</span></span></div>
+    </aside>
+    <main class="center"><article class="document">
+      <header class="head"><div><h1>2017 年经营概览</h1><p>Purchase-time view · delivered Payment GMV / AOV · all-order Delivery Rate baseline</p></div><span class="verified">Validated</span></header>
+      <section class="kpis"><div class="kpi"><span>Delivered orders</span><strong>14,429</strong></div><div class="kpi"><span>Payment GMV</span><strong>R$2.32M</strong></div><div class="kpi"><span>AOV</span><strong>R$160.82</strong></div><div class="kpi"><span>Delivery Rate</span><strong>96.19%</strong></div></section>
+      <section class="analysis-grid"><div><div class="section-head"><h2>Monthly operating trend</h2><div class="metric-switch"><b>Payment GMV</b><span>AOV</span><span>Delivery Rate</span></div></div><div class="chart"><svg class="chart-svg" viewBox="0 0 620 240"><line class="gridline" x1="24" y1="202" x2="600" y2="202"/><line class="gridline" x1="24" y1="145" x2="600" y2="145"/><line class="gridline" x1="24" y1="88" x2="600" y2="88"/><line class="gridline" x1="24" y1="31" x2="600" y2="31"/><path class="trend-area" d="M24 192 L76 159 L128 137 L180 146 L232 111 L284 123 L336 108 L388 100 L440 88 L492 73 L544 22 L596 54 L596 202 L24 202Z"/><path class="trend-line" d="M24 192 L76 159 L128 137 L180 146 L232 111 L284 123 L336 108 L388 100 L440 88 L492 73 L544 22 L596 54"/><circle class="peak" cx="544" cy="22" r="5"/><g class="axis"><text x="18" y="225">Jan</text><text x="123" y="225">Mar</text><text x="227" y="225">May</text><text x="331" y="225">Jul</text><text x="435" y="225">Sep</text><text x="536" y="225">Nov</text></g></svg><div class="axis-note"><span>Delivered-order GMV</span><span>Peak · Nov R$394.76K</span></div></div></div><aside class="findings"><div class="section-head"><h2>Key findings</h2></div><div class="finding"><b>Scale</b><p>November reached the annual GMV peak.</p></div><div class="finding"><b>Fulfillment</b><p>Delivery Rate remained high at 96.19%.</p></div><div class="finding"><b>Mix</b><p>Order volume, not AOV, drove the peak.</p></div></aside></section>
+      <section class="table-wrap"><div class="section-head"><h2>Quarter-end detail</h2><span class="muted">Same scope as overall metrics</span></div><table><thead><tr><th>Month</th><th>Delivered orders</th><th>Payment GMV</th><th>AOV</th><th>Delivery rate</th></tr></thead><tbody><tr><td>October</td><td>1,519</td><td>R$265.03K</td><td>R$174.49</td><td>96.08%</td></tr><tr><td>November</td><td>2,435</td><td>R$394.76K</td><td>R$162.12</td><td>96.44%</td></tr><tr><td>December</td><td>1,876</td><td>R$315.33K</td><td>R$168.09</td><td>96.17%</td></tr></tbody></table></section>
+      <section class="followup"><div class="added">Added analysis · November diagnosis</div><h2>为什么 11 月 GMV 最高？</h2><p>同口径比较 October → November，拆解订单量与 AOV。</p><table class="driver-table"><thead><tr><th>Driver</th><th>October</th><th>November</th><th>Change</th><th>Interpretation</th></tr></thead><tbody><tr><td>Delivered orders</td><td>1,519</td><td>2,435</td><td>+60.30%</td><td>Primary driver</td></tr><tr><td>AOV</td><td>R$174.49</td><td>R$162.12</td><td>−7.09%</td><td>Offsetting</td></tr></tbody></table><div class="driver-conclusion">订单量扩张解释了 11 月 GMV 峰值；当前数据没有促销、品类或渠道字段，因此不做因果归因。</div></section>
+    </article></main>
+    <aside class="right"><div class="inspector-head"><h2>Evidence Inspector</h2><p class="inspector-overview">Inspecting · Payment GMV</p><p class="inspector-followup">Inspecting · November diagnosis</p></div><div class="inspect-tabs"><span class="active">Evidence</span><span>Plan</span><span>Validation</span></div><div class="properties inspector-overview"><dl><div class="property"><dt>Metric</dt><dd><code>ecommerce.payment_gmv</code></dd></div><div class="property"><dt>Value</dt><dd>R$2,320,454.39</dd></div><div class="property"><dt>Population</dt><dd>order_status = delivered</dd></div><div class="property"><dt>Time field</dt><dd><code>orders.order_purchase_timestamp</code></dd></div><div class="property"><dt>Grain</dt><dd>Order</dd></div><div class="property"><dt>Join</dt><dd>Payments pre-aggregated → left join orders</dd></div></dl></div><div class="properties inspector-followup"><dl><div class="property"><dt>Question</dt><dd>Why November GMV peaked</dd></div><div class="property"><dt>Baseline</dt><dd>October 2017</dd></div><div class="property"><dt>Orders</dt><dd>+60.30%</dd></div><div class="property"><dt>AOV</dt><dd>−7.09%</dd></div><div class="property"><dt>Conclusion</dt><dd>Volume-supported observation</dd></div><div class="property"><dt>Boundary</dt><dd>No causal claim</dd></div></dl></div><div class="check-row"><span>Plan → Evidence coverage</span><b>4 / 4</b></div><details><summary>Assumptions & limitations</summary><div class="details-body">No promotion, category or acquisition-channel attribution is possible from the two uploaded tables.</div></details><details><summary>Developer trace</summary><div class="details-body">Collapsed by default. Profile → Ground → Plan → Gate → Execute → Evidence → Validate.</div></details></aside>
+  </div>
+  <script src="shared.js"></script>
+</body>
+</html>

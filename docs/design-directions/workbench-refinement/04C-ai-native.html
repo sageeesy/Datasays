@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DataSays · 04C AI-native Workbench</title>
+  <link rel="stylesheet" href="shared.css" />
+  <style>
+    :root { --ink:#17231e; --muted:#68756f; --line:#d2dad5; --paper:#fff; --shell:#eef2ef; --green:#0e765d; --blue:#35659c; --gold:#bf8426; --context:#e7f0ec; }
+    body { color:var(--ink); background:var(--shell); }
+    .shell { display:grid; grid-template-columns:218px minmax(680px,1fr) 258px; grid-template-rows:54px minmax(0,1fr); height:100vh; }
+    .top { grid-column:1/-1; display:flex; align-items:center; gap:26px; padding:0 16px; border-bottom:1px solid var(--line); background:#fff; }
+    .top nav { display:flex; gap:18px; color:var(--muted); font-size:10px; }
+    .top nav b { color:var(--ink); }
+    .session { margin-left:auto; color:var(--muted); font-size:9px; }
+    .left { display:flex; min-height:0; flex-direction:column; overflow:auto; padding:18px 14px 13px; border-right:1px solid var(--line); background:#f7f9f7; }
+    .left h2, .right h2 { margin:0; font-size:11px; }
+    .prompt { margin:12px 0 20px; color:#39453f; font-size:9px; line-height:1.6; }
+    .label { margin:0 0 7px; color:#77837d; font-size:8px; font-weight:800; text-transform:uppercase; }
+    .dataset { padding:9px 0; border-top:1px solid var(--line); font-size:9px; }
+    .dataset b { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .dataset span { display:block; margin-top:3px; color:var(--muted); font-size:8px; }
+    .analysis-list { margin-top:22px; }
+    .analysis-item { position:relative; padding:8px 0 8px 14px; color:var(--muted); font-size:9px; line-height:1.4; }
+    .analysis-item::before { content:""; position:absolute; top:13px; left:1px; width:5px; height:5px; border:1px solid #a9b5ae; border-radius:50%; background:#fff; }
+    .analysis-item.active { color:var(--ink); font-weight:800; }
+    .analysis-item.active::before { border-color:var(--green); background:var(--green); }
+    .left-note { margin-top:auto; padding-top:14px; border-top:1px solid var(--line); color:var(--muted); font-size:8px; line-height:1.45; }
+    .center { position:relative; overflow:auto; background:#fff; }
+    .context-bar { position:sticky; z-index:5; top:0; display:flex; align-items:center; justify-content:space-between; gap:18px; min-height:38px; padding:8px 24px; border-bottom:1px solid var(--line); background:rgba(255,255,255,.98); color:var(--muted); font-size:8px; }
+    .context-bar b { color:var(--ink); }
+    .context-bar span:last-child { white-space:nowrap; }
+    .document { max-width:960px; margin:0 auto; padding:30px 34px 128px; }
+    .head { display:flex; align-items:flex-start; justify-content:space-between; gap:22px; }
+    h1 { margin:0; font-size:26px; font-weight:720; }
+    .head p { max-width:670px; margin:7px 0 0; color:var(--muted); font-size:10px; line-height:1.55; }
+    .kpis { display:grid; grid-template-columns:repeat(4,1fr); margin-top:27px; border-top:1px solid var(--ink); border-bottom:1px solid var(--line); }
+    .kpi { padding:14px 13px 16px 0; }
+    .kpi + .kpi { padding-left:16px; border-left:1px solid var(--line); }
+    .kpi span { display:block; color:var(--muted); font-size:8px; }
+    .kpi strong { display:block; margin-top:6px; font-size:21px; }
+    .section { margin-top:32px; }
+    .section-head { display:flex; align-items:end; justify-content:space-between; gap:15px; margin-bottom:11px; }
+    .section-head h2 { margin:0; font-size:14px; }
+    .section-head span { color:var(--muted); font-size:8px; }
+    .chart { color:var(--green); border-bottom:1px solid var(--line); }
+    .chart-svg { height:275px; }
+    .chart-caption { display:flex; justify-content:space-between; padding:8px 0 11px; color:var(--muted); font-size:8px; }
+    .findings { display:grid; grid-template-columns:repeat(3,1fr); border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
+    .finding { padding:14px 16px 15px 0; }
+    .finding + .finding { padding-left:16px; border-left:1px solid var(--line); }
+    .finding b { display:block; margin-bottom:5px; color:var(--gold); font-size:8px; }
+    .finding p { margin:0; color:#3f4b45; font-size:9px; line-height:1.55; }
+    .followup { display:none; margin-top:38px; }
+    body[data-state="3"] .followup { display:block; }
+    .analysis-event { display:flex; align-items:center; gap:8px; margin-bottom:13px; color:var(--green); font-size:8px; font-weight:800; }
+    .analysis-event::before { content:""; width:22px; height:1px; background:var(--green); }
+    .followup h2 { margin:0; font-size:20px; }
+    .followup .method { margin:7px 0 17px; color:var(--muted); font-size:9px; }
+    .drivers { display:grid; grid-template-columns:1.25fr .75fr; gap:24px; padding:18px 0; border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
+    .driver-bars { display:grid; gap:10px; }
+    .bar-row { display:grid; grid-template-columns:88px 1fr 58px; gap:9px; align-items:center; font-size:8px; }
+    .bar { height:6px; background:#e8ece9; }
+    .bar i { display:block; height:100%; background:var(--green); }
+    .bar-row.negative .bar i { margin-left:88%; width:12% !important; background:#9e7650; }
+    .bar-row strong { text-align:right; }
+    .driver-answer { padding-left:20px; border-left:1px solid var(--line); }
+    .driver-answer b { display:block; margin-bottom:7px; font-size:10px; }
+    .driver-answer p { margin:0; color:#3e4a44; font-size:9px; line-height:1.6; }
+    .boundary { margin-top:13px; color:var(--muted); font-size:8px; line-height:1.55; }
+    .ask-dock { position:sticky; z-index:6; bottom:14px; width:min(760px, calc(100% - 48px)); margin:-92px auto 16px; padding:10px 12px; border:1px solid #acbab2; border-radius:8px; background:#fff; box-shadow:0 8px 24px rgba(24,39,31,.13); }
+    .ask-dock b { display:block; color:#334039; font-size:10px; font-weight:650; }
+    .ask-meta { display:flex; align-items:center; justify-content:space-between; gap:14px; margin-top:9px; color:var(--muted); font-size:8px; }
+    .ask-meta .context { color:var(--green); }
+    .run { padding:5px 8px; border:0; border-radius:4px; background:#193d32; color:#fff; font-size:8px; font-weight:800; }
+    .right { overflow:auto; padding:18px 15px 24px; border-left:1px solid var(--line); background:#f5f8f6; }
+    .inspecting { margin:5px 0 18px; color:var(--muted); font-size:8px; }
+    .evidence-title { padding-bottom:9px; border-bottom:1px solid var(--ink); font-size:10px; font-weight:800; }
+    .property { display:grid; grid-template-columns:67px 1fr; gap:8px; padding:9px 0; border-bottom:1px solid #dce2de; font-size:8px; line-height:1.5; }
+    .property dt { color:var(--muted); }
+    .property dd { margin:0; overflow-wrap:anywhere; }
+    .property code { color:var(--blue); font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:8px; }
+    .validation { display:flex; justify-content:space-between; margin-top:17px; padding:11px 0; border-top:1px solid var(--ink); border-bottom:1px solid var(--line); font-size:8px; }
+    .validation b { color:var(--green); }
+    details { border-bottom:1px solid var(--line); }
+    summary { padding:10px 0; list-style:none; font-size:8px; font-weight:750; }
+    summary::after { content:"+"; float:right; }
+    .details-body { padding:0 0 10px; color:var(--muted); font-size:8px; line-height:1.55; }
+    .inspect-followup { display:none; }
+    body[data-state="3"] .inspect-overview { display:none; }
+    body[data-state="3"] .inspect-followup { display:block; }
+    @media (max-width:760px) {
+      .shell { display:block; height:auto; }
+      .top { position:sticky; top:0; z-index:10; height:54px; }
+      .top nav, .session { display:none; }
+      .left { padding:13px 14px; border-right:0; border-bottom:1px solid var(--line); }
+      .prompt, .label, .dataset, .analysis-list, .left-note { display:none; }
+      .context-bar { top:54px; padding:8px 14px; }
+      .document { padding:24px 14px 132px; }
+      .head { display:block; }
+      .verified { margin-top:10px; }
+      .kpis { grid-template-columns:repeat(2,1fr); }
+      .kpi:nth-child(3) { padding-left:0; border-top:1px solid var(--line); border-left:0; }
+      .kpi:nth-child(4) { border-top:1px solid var(--line); }
+      .chart-svg { height:215px; }
+      .findings { grid-template-columns:1fr; }
+      .finding + .finding { padding-left:0; border-top:1px solid var(--line); border-left:0; }
+      .drivers { grid-template-columns:1fr; }
+      .driver-answer { padding:15px 0 0; border-top:1px solid var(--line); border-left:0; }
+      .ask-dock { bottom:62px; width:calc(100% - 22px); }
+      .right { border-top:1px solid var(--line); border-left:0; }
+    }
+  </style>
+</head>
+<body data-state="2">
+  <div class="demo-state"><button data-state-button="2" aria-pressed="true">State 2 · Overview</button><button data-state-button="3" aria-pressed="false">State 3 · Follow-up</button></div>
+  <div class="shell">
+    <header class="top"><div class="brand"><span class="brand-mark">D</span>DataSays</div><nav><b>可信分析</b><span>对比实验</span><span>数据看板</span></nav><div class="session">Olist · 2 datasets · saved just now</div></header>
+    <aside class="left"><h2>2017 经营分析</h2><p class="prompt">请分析整体经营表现，包括已交付订单、Payment GMV、AOV 和交付率，并展示月度趋势。</p><p class="label">Datasets in context</p><div class="dataset"><b>olist_orders_2017.csv</b><span>Orders · purchase time · 15K rows</span></div><div class="dataset"><b>olist_payments_2017.csv</b><span>Payments · order_id · 16K rows</span></div><div class="analysis-list"><p class="label">Analysis sections</p><div class="analysis-item active">2017 Overview</div><div class="analysis-item followup-only">November diagnosis</div></div><p class="left-note">DataSays adds follow-up work to this analysis. Evidence remains scoped to the selected section.</p></aside>
+    <main class="center"><div class="context-bar"><span>Analysis context · <b class="inspect-overview">2017 Overview</b><b class="inspect-followup">November diagnosis</b></span><span>Using 2 datasets · 4 planned metrics</span></div><article class="document">
+      <header class="head"><div><h1>2017 年经营概览</h1><p>基于 purchase time；Payment GMV / AOV 使用 delivered population，Delivery Rate 使用 all-orders denominator。</p></div><span class="verified">Verified</span></header>
+      <section class="kpis"><div class="kpi"><span>Delivered orders</span><strong>14,429</strong></div><div class="kpi"><span>Payment GMV</span><strong>R$2.32M</strong></div><div class="kpi"><span>AOV</span><strong>R$160.82</strong></div><div class="kpi"><span>Delivery Rate</span><strong>96.19%</strong></div></section>
+      <section class="section"><div class="section-head"><h2>Monthly operating trend</h2><span>Payment GMV · delivered orders</span></div><div class="chart"><svg class="chart-svg" viewBox="0 0 720 265"><line class="gridline" x1="30" y1="220" x2="690" y2="220"/><line class="gridline" x1="30" y1="158" x2="690" y2="158"/><line class="gridline" x1="30" y1="96" x2="690" y2="96"/><line class="gridline" x1="30" y1="34" x2="690" y2="34"/><path class="trend-area" d="M30 210 L90 174 L150 151 L210 159 L270 122 L330 136 L390 119 L450 110 L510 96 L570 80 L630 24 L687 60 L687 220 L30 220Z"/><path class="trend-line" d="M30 210 L90 174 L150 151 L210 159 L270 122 L330 136 L390 119 L450 110 L510 96 L570 80 L630 24 L687 60"/><circle class="peak" cx="630" cy="24" r="6"/><g class="axis"><text x="24" y="246">Jan</text><text x="144" y="246">Mar</text><text x="264" y="246">May</text><text x="384" y="246">Jul</text><text x="504" y="246">Sep</text><text x="620" y="246">Nov</text></g></svg><div class="chart-caption"><span>Same population for overall and trend</span><span>November peak · R$394.76K</span></div></div></section>
+      <section class="section"><div class="section-head"><h2>Key findings</h2><span>Evidence-backed observations</span></div><div class="findings"><div class="finding"><b>Scale</b><p>November reached the annual Payment GMV peak.</p></div><div class="finding"><b>Fulfillment</b><p>Delivery Rate stayed high at 96.19%.</p></div><div class="finding"><b>Mix</b><p>The peak came from order volume rather than higher AOV.</p></div></div></section>
+      <section class="followup"><div class="analysis-event">Added analysis · November diagnosis</div><h2>为什么 11 月 GMV 最高？</h2><p class="method">DataSays compared the same delivered-order population and decomposed GMV into order volume × AOV.</p><div class="drivers"><div class="driver-bars"><div class="bar-row"><span>Delivered orders</span><div class="bar"><i style="width:100%"></i></div><strong>+60.30%</strong></div><div class="bar-row negative"><span>AOV</span><div class="bar"><i style="width:12%"></i></div><strong>−7.09%</strong></div><div class="bar-row"><span>Q4 GMV share</span><div class="bar"><i style="width:69%"></i></div><strong>41.81%</strong></div></div><div class="driver-answer"><b>Volume drove the peak</b><p>订单量增长足以解释 11 月峰值；AOV 下降，对增长形成轻微抵消。</p></div></div><p class="boundary">Evidence boundary · 当前数据不能判断促销、品类或渠道是否造成增长，需补充相应字段后再验证。</p></section>
+    </article><div class="ask-dock"><b>Ask DataSays about this analysis…</b><div class="ask-meta"><span class="context inspect-overview">Context · 2017 Overview · 2 datasets</span><span class="context inspect-followup">Context · November diagnosis · 2 datasets</span><button class="run">Run analysis</button></div></div></main>
+    <aside class="right"><h2>Evidence Inspector</h2><p class="inspecting inspect-overview">Inspecting · Payment GMV</p><p class="inspecting inspect-followup">Inspecting · November diagnosis</p><div class="inspect-overview"><div class="evidence-title">Payment GMV · R$2.32M</div><dl><div class="property"><dt>Scope</dt><dd>2017 delivered orders</dd></div><div class="property"><dt>Source</dt><dd>orders + payments</dd></div><div class="property"><dt>Time</dt><dd><code>order_purchase_timestamp</code></dd></div><div class="property"><dt>Compute</dt><dd>Payments by order → left join</dd></div><div class="property"><dt>Identity</dt><dd><code>payment_gmv</code></dd></div></dl></div><div class="inspect-followup"><div class="evidence-title">November diagnosis</div><dl><div class="property"><dt>Baseline</dt><dd>October 2017</dd></div><div class="property"><dt>Orders</dt><dd>+60.30%</dd></div><div class="property"><dt>AOV</dt><dd>−7.09%</dd></div><div class="property"><dt>Population</dt><dd>Delivered orders</dd></div><div class="property"><dt>Boundary</dt><dd>Observation, not causal claim</dd></div></dl></div><div class="validation"><span>Plan → Evidence</span><b>Validated</b></div><details><summary>Plan & assumptions</summary><div class="details-body">Metric scope, denominator, purchase time, pre-aggregation and left join.</div></details><details><summary>Developer trace</summary><div class="details-body">Available for debugging; collapsed in the default user view.</div></details></aside>
+  </div>
+  <script src="shared.js"></script>
+</body>
+</html>

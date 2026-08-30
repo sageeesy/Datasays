@@ -1,0 +1,43 @@
+* { box-sizing: border-box; }
+:root {
+  font-family: "Avenir Next", "PingFang SC", system-ui, sans-serif;
+  color: #18211d;
+  background: #f3f5f3;
+}
+body { margin: 0; min-width: 1080px; min-height: 100vh; }
+button, input, summary { font: inherit; }
+button { cursor: pointer; }
+.state-switcher {
+  position: fixed; z-index: 20; top: 10px; left: 50%; display: flex; gap: 2px;
+  padding: 3px; border: 1px solid #c8cfcb; border-radius: 7px; background: #fff;
+  box-shadow: 0 2px 8px rgba(24,33,29,.08); transform: translateX(-50%);
+}
+.state-switcher button { padding: 6px 9px; border: 0; border-radius: 4px; background: transparent; color: #647069; font-size: 10px; }
+.state-switcher button[aria-pressed="true"] { background: #163b31; color: #fff; font-weight: 800; }
+.empty-only, .analysis-on, .followup-only, .snapshot-only { display: none !important; }
+body[data-state="0"] .empty-only { display: flex !important; }
+body[data-state="1"] .analysis-on, body[data-state="2"] .analysis-on { display: flex !important; }
+body[data-state="1"] .snapshot-only { display: flex !important; }
+body[data-state="2"] .followup-only { display: flex !important; }
+.brand { display: flex; align-items: center; gap: 9px; font-weight: 900; }
+.brand-mark { display: grid; place-items: center; width: 27px; height: 27px; border-radius: 6px; background: #18251f; color: #fff; }
+.muted { color: #748078; }
+.eyebrow { color: #75817a; font-size: 9px; font-weight: 800; text-transform: uppercase; }
+.verified { display: inline-flex; align-items: center; gap: 6px; color: #08785f; font-size: 9px; font-weight: 800; }
+.verified::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #0a8a6b; }
+.chart-svg { display: block; width: 100%; height: auto; }
+.chart-grid { stroke: #dfe5e1; stroke-width: 1; }
+.chart-line { fill: none; stroke: currentColor; stroke-width: 3; }
+.chart-area { fill: currentColor; opacity: .08; }
+.chart-dot { fill: #fff; stroke: currentColor; stroke-width: 2; }
+.chart-peak { fill: #e5b632; stroke: #fff; stroke-width: 2; }
+.axis-label { fill: #7b867f; font-size: 9px; }
+.kpi strong { font-variant-numeric: tabular-nums; letter-spacing: 0; }
+.question-text { line-height: 1.55; }
+.followup-question { color: #23342c; font-weight: 700; }
+.evidence-row code { color: #3460bb; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 8px; }
+@media (max-width: 760px) {
+  body { min-width: 0; }
+  .state-switcher { top: auto; bottom: 10px; width: calc(100% - 20px); justify-content: center; }
+  .state-switcher button { flex: 1; }
+}

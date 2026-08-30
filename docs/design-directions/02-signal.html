@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DataSays · 经营信号台</title>
+  <style>
+    * { box-sizing:border-box; }
+    :root { color-scheme:dark; --bg:#070909; --panel:#0c1010; --line:#28312e; --green:#43f0a3; --dim:#739086; --cyan:#65d8ef; --amber:#f3b74c; --white:#e9f2ef; --red:#ff6d62; }
+    body { margin:0; min-width:1000px; background:var(--bg); color:var(--white); font-family:"DIN Alternate", "Avenir Next", system-ui, sans-serif; }
+    button, summary { font:inherit; }
+    .shell { display:grid; grid-template-rows:58px 94px minmax(470px,1fr) 138px; min-height:100vh; border:1px solid #1b2321; }
+    .topbar { display:flex; align-items:center; gap:24px; padding:0 22px; border-bottom:1px solid var(--line); }
+    .brand { display:flex; align-items:center; gap:10px; min-width:190px; color:var(--green); font-weight:800; }
+    .scope { color:#a4b5af; font-size:11px; }
+    .scope b { color:var(--white); }
+    .run-state { margin-left:auto; display:flex; align-items:center; gap:8px; color:var(--green); font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:10px; }
+    .lamp { width:7px; height:7px; border:1px solid #8affc7; border-radius:50%; background:var(--green); }
+    .channels { display:grid; grid-template-columns:repeat(4,1fr); border-bottom:1px solid var(--line); }
+    .channel { display:grid; grid-template-columns:42px 1fr; align-items:center; gap:10px; padding:14px 18px; border-right:1px solid var(--line); }
+    .channel:last-child { border-right:0; }
+    .channel-id { color:var(--dim); font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:9px; }
+    .channel strong { display:block; margin-top:2px; color:var(--white); font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:23px; letter-spacing:0; }
+    .channel span { color:#82958f; font-size:10px; }
+    .channel.active { background:#0d1512; }
+    .channel.active strong, .channel.active .channel-id { color:var(--green); }
+    .main { display:grid; grid-template-columns:minmax(650px,1fr) 290px; min-height:0; }
+    .scope-view { display:grid; grid-template-rows:46px 1fr; border-right:1px solid var(--line); }
+    .scope-head { display:flex; align-items:center; gap:16px; padding:0 18px; border-bottom:1px solid var(--line); color:#9badA7; font-size:10px; }
+    .scope-head b { color:var(--white); font-size:12px; }
+    .scope-head .selected { color:var(--green); }
+    .chart { position:relative; min-height:410px; background-image:linear-gradient(rgba(64,91,81,.2) 1px, transparent 1px),linear-gradient(90deg, rgba(64,91,81,.2) 1px, transparent 1px); background-size:10% 20%; }
+    .chart svg { position:absolute; inset:0; width:100%; height:100%; }
+    .wave { fill:none; stroke:var(--green); stroke-width:3; filter:drop-shadow(0 0 4px rgba(67,240,163,.35)); }
+    .wave2 { fill:none; stroke:var(--cyan); stroke-width:1.5; opacity:.7; }
+    .cursor { stroke:var(--amber); stroke-width:1; stroke-dasharray:4 4; }
+    .cursor-dot { fill:var(--amber); }
+    .chart-label { fill:#72867f; font:10px ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .chart-readout { fill:var(--amber); font:11px ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .controls { padding:18px; background:#0a0d0c; }
+    .controls h2 { margin:0 0 5px; color:var(--white); font-size:14px; }
+    .controls > p { margin:0 0 22px; color:#7f928b; font-size:10px; line-height:1.55; }
+    .control { display:grid; grid-template-columns:72px 1fr; gap:10px; padding:12px 0; border-top:1px solid var(--line); }
+    .control dt { color:#6e827a; font-size:9px; text-transform:uppercase; }
+    .control dd { margin:0; color:#d3dfdb; font-size:10px; line-height:1.45; }
+    .control code { color:var(--green); font-family:ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .knob-row { display:flex; gap:10px; margin-top:18px; }
+    .knob { position:relative; display:grid; place-items:center; width:54px; height:54px; border:1px solid #40524b; border-radius:50%; background:#111715; color:var(--amber); font-size:9px; box-shadow:inset 0 0 0 5px #090c0b; }
+    .knob::before { content:""; position:absolute; width:1px; height:15px; margin-top:-25px; background:var(--amber); }
+    .console { display:grid; grid-template-columns:1.35fr 1fr 1fr; border-top:1px solid var(--line); background:#090c0b; }
+    .console section { padding:14px 18px; border-right:1px solid var(--line); }
+    .console section:last-child { border-right:0; }
+    .console h3 { margin:0 0 10px; color:#879a93; font-size:9px; text-transform:uppercase; }
+    .finding { display:flex; gap:10px; margin:6px 0; color:#becbc6; font-size:10px; line-height:1.45; }
+    .finding b { color:var(--amber); font-family:ui-monospace, SFMono-Regular, Menlo, monospace; }
+    details { border-top:1px solid #304039; }
+    summary { padding:8px 0; color:#c9d5d0; cursor:pointer; font-size:10px; list-style:none; }
+    summary::after { content:"[OPEN]"; float:right; color:var(--green); font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:8px; }
+    details[open] summary::after { content:"[CLOSE]"; }
+    .detail { color:#8ca098; font-size:9px; line-height:1.5; }
+    .checks { display:grid; grid-template-columns:1fr auto; gap:6px 12px; color:#9cb0a8; font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:9px; }
+    .checks b { color:var(--green); }
+    @media (max-width:760px) {
+      body { min-width:0; }
+      .shell { grid-template-rows:auto auto auto auto; }
+      .topbar { min-height:56px; flex-wrap:wrap; padding:10px 14px; }
+      .scope { display:none; }
+      .channels { grid-template-columns:repeat(2,1fr); }
+      .channel:nth-child(2) { border-right:0; }
+      .channel:nth-child(-n+2) { border-bottom:1px solid var(--line); }
+      .main { display:block; }
+      .scope-view { border-right:0; }
+      .chart { min-height:330px; }
+      .controls { border-top:1px solid var(--line); }
+      .console { display:block; }
+      .console section { border-right:0; border-bottom:1px solid var(--line); }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand"><span class="lamp"></span>DATASAYS / SIGNAL</div>
+      <div class="scope">QUESTION <b>2017 年经营概览</b></div>
+      <div class="scope">TIMEBASE <b>MONTH / 2017</b></div>
+      <div class="run-state"><span class="lamp"></span> EXECUTION + EVIDENCE CHECKS PASS</div>
+    </header>
+
+    <section class="channels" aria-label="核心指标通道">
+      <div class="channel"><div class="channel-id">CH 01<br>COUNT</div><div><span>已交付订单</span><strong>14,429</strong></div></div>
+      <div class="channel active"><div class="channel-id">CH 02<br>BRL</div><div><span>PAYMENT GMV</span><strong>R$2.32M</strong></div></div>
+      <div class="channel"><div class="channel-id">CH 03<br>BRL</div><div><span>AOV</span><strong>R$160.82</strong></div></div>
+      <div class="channel"><div class="channel-id">CH 04<br>RATE</div><div><span>DELIVERY RATE</span><strong>96.19%</strong></div></div>
+    </section>
+
+    <section class="main">
+      <div class="scope-view">
+        <div class="scope-head"><b>月度经营信号</b><span class="selected">CH02 Payment GMV</span><span>CH04 Delivery Rate</span><span>12 samples</span></div>
+        <div class="chart" role="img" aria-label="2017年月度经营趋势信号图">
+          <svg viewBox="0 0 900 430" preserveAspectRatio="none">
+            <path class="wave" d="M22 362 L99 292 L176 245 L253 265 L330 194 L407 224 L484 188 L561 169 L638 144 L715 113 L792 34 L878 89" />
+            <path class="wave2" d="M22 285 L99 305 L176 250 L253 202 L330 168 L407 143 L484 174 L561 150 L638 119 L715 145 L792 147 L878 113" />
+            <line class="cursor" x1="792" y1="0" x2="792" y2="430" /><circle class="cursor-dot" cx="792" cy="34" r="5" />
+            <g class="chart-label"><text x="16" y="420">JAN</text><text x="93" y="420">FEB</text><text x="170" y="420">MAR</text><text x="247" y="420">APR</text><text x="324" y="420">MAY</text><text x="401" y="420">JUN</text><text x="478" y="420">JUL</text><text x="555" y="420">AUG</text><text x="632" y="420">SEP</text><text x="709" y="420">OCT</text><text x="786" y="420">NOV</text><text x="863" y="420">DEC</text></g>
+            <text class="chart-readout" x="690" y="22">CURSOR A · NOV · R$394.76K</text>
+          </svg>
+        </div>
+      </div>
+
+      <aside class="controls">
+        <h2>Measurement contract</h2>
+        <p>当前信号由结构化 AnalysisPlan 和 Evidence 生成。切换通道不会改变指标总体。</p>
+        <dl>
+          <div class="control"><dt>Population</dt><dd><code>order_status = delivered</code><br>用于 Payment GMV / AOV</dd></div>
+          <div class="control"><dt>Baseline</dt><dd>2017 全部订单<br>用于 Delivery Rate 分母</dd></div>
+          <div class="control"><dt>Join</dt><dd>Payments 按 order_id 预聚合后 <code>LEFT JOIN</code></dd></div>
+          <div class="control"><dt>Event time</dt><dd><code>order_purchase_timestamp</code></dd></div>
+        </dl>
+        <div class="knob-row" aria-hidden="true"><span class="knob">GMV</span><span class="knob">MONTH</span><span class="knob">HOLD</span></div>
+      </aside>
+    </section>
+
+    <footer class="console">
+      <section><h3>Key observations</h3><div class="finding"><b>01</b><span>11 月 Payment GMV 达到全年峰值。</span></div><div class="finding"><b>02</b><span>3 月后月度交付率维持约 94%—97%。</span></div><div class="finding"><b>03</b><span>规模增长主要由订单量推动，AOV 相对稳定。</span></div></section>
+      <section><h3>Evidence console</h3><details><summary>查看分析依据</summary><div class="detail">Metric definitions · Plan · 4 scalar Evidence · 1 monthly dataset</div></details><details><summary>查看执行轨迹</summary><div class="detail">Profile → Ground → Plan → Execute → Validate</div></details></section>
+      <section><h3>System checks</h3><div class="checks"><span>PYTHON_SANDBOX</span><b>PASS</b><span>EVIDENCE_COVERAGE</span><b>4/4</b><span>FIELD_REFERENCES</span><b>PASS</b><span>SEMANTIC_SCOPE</span><b>TRACEABLE</b></div></section>
+    </footer>
+  </main>
+</body>
+</html>

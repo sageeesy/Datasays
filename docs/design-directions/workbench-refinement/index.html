@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DataSays · Evidence Workbench Refinement</title>
+  <style>
+    * { box-sizing: border-box; }
+    :root { font-family: "Avenir Next", "PingFang SC", system-ui, sans-serif; color: #17221d; }
+    body { margin: 0; background: #edf0ee; }
+    header { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 24px; padding: 16px 20px; border-bottom: 1px solid #cbd2ce; background: #fff; }
+    h1 { margin: 0; font-size: 21px; letter-spacing: 0; }
+    header p { margin: 3px 0 0; color: #6e7873; font-size: 11px; }
+    .states { margin-left: auto; display: flex; gap: 3px; padding: 3px; border: 1px solid #cbd2ce; border-radius: 7px; }
+    .states button { padding: 7px 11px; border: 0; border-radius: 4px; background: transparent; color: #69746e; font-size: 10px; cursor: pointer; }
+    .states button.active { background: #173b31; color: #fff; font-weight: 800; }
+    main { display: grid; grid-template-columns: repeat(4, 410px); gap: 14px; min-width: 1682px; padding: 16px; }
+    article { overflow: hidden; border: 1px solid #cbd2ce; border-radius: 8px; background: #fff; }
+    .head { display: flex; align-items: center; justify-content: space-between; gap: 10px; height: 60px; padding: 10px 12px; border-bottom: 1px solid #dce1de; }
+    .head b { display: block; font-size: 13px; }
+    .head span { color: #727d77; font-size: 10px; }
+    .head a { color: #285bb6; font-size: 10px; font-weight: 800; text-decoration: none; }
+    .viewport { width: 408px; height: 270px; overflow: hidden; background: #e3e7e4; }
+    iframe { width: 1280px; height: 844px; border: 0; transform: scale(.31875); transform-origin: top left; pointer-events: none; }
+    .note { min-height: 76px; padding: 11px 12px; color: #56615b; font-size: 10px; line-height: 1.55; }
+    .note b { color: #17221d; }
+  </style>
+</head>
+<body>
+  <header><div><h1>DataSays · Controlled Workbench Refinement</h1><p>固定原 04 产品形态，只比较视觉密度、层级与 AI 追问表达</p></div><div class="states"><button class="active" data-state="2">State 2 · Overview</button><button data-state="3">State 3 · Follow-up</button></div></header>
+  <main>
+    <article><div class="head"><div><b>Original 04</b><span>Evidence Workbench base</span></div><a href="../04-workbench.html">单独打开</a></div><div class="viewport"><iframe src="../04-workbench.html" title="Original Evidence Workbench"></iframe></div><div class="note"><b>基准。</b> 三栏结构正确，但字号、边框和卡片权重仍像第一版设计稿；原版固定展示 State 2。</div></article>
+    <article><div class="head"><div><b>04A · Spacious</b><span>安静、成熟、连续文档</span></div><a href="04A-spacious.html?state=2">单独打开</a></div><div class="viewport"><iframe src="04A-spacious.html?state=2" title="Spacious refined workbench"></iframe></div><div class="note"><b>减少框线。</b> 中间区域像一份自然生长的分析文档，图表成为主要视觉对象。</div></article>
+    <article><div class="head"><div><b>04B · Analyst</b><span>专业、紧凑、长期工作</span></div><a href="04B-analyst.html?state=2">单独打开</a></div><div class="viewport"><iframe src="04B-analyst.html?state=2" title="Professional analyst workbench"></iframe></div><div class="note"><b>提高有效密度。</b> Dataset 导航与 Inspector 更精确，但不变成 BI 或 IDE。</div></article>
+    <article><div class="head"><div><b>04C · AI-native</b><span>轻对话、上下文追问</span></div><a href="04C-ai-native.html?state=2">单独打开</a></div><div class="viewport"><iframe src="04C-ai-native.html?state=2" title="AI-native evidence workbench"></iframe></div><div class="note"><b>强化 AI 行为。</b> 输入始终存在，追问被加入分析正文而不是聊天气泡。</div></article>
+  </main>
+  <script>
+    const buttons = [...document.querySelectorAll('[data-state]')];
+    const refinements = [...document.querySelectorAll('iframe')].slice(1);
+    const links = [...document.querySelectorAll('.head a')].slice(1);
+    buttons.forEach((button) => button.addEventListener('click', () => {
+      buttons.forEach((item) => item.classList.toggle('active', item === button));
+      refinements.forEach((frame) => { const url = new URL(frame.src); url.searchParams.set('state', button.dataset.state); frame.src = url; });
+      links.forEach((link) => { const url = new URL(link.href); url.searchParams.set('state', button.dataset.state); link.href = url; });
+    }));
+  </script>
+</body>
+</html>

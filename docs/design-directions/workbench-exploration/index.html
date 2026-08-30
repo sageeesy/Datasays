@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DataSays · Workbench Exploration</title>
+  <style>
+    * { box-sizing: border-box; }
+    :root { font-family: "Avenir Next", "PingFang SC", system-ui, sans-serif; color: #18211d; }
+    body { margin: 0; background: #edf0ee; }
+    header { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 28px; padding: 16px 20px; border-bottom: 1px solid #cbd2ce; background: #fff; }
+    h1 { margin: 0; font-size: 21px; letter-spacing: 0; }
+    header p { margin: 3px 0 0; color: #6d7772; font-size: 11px; }
+    .states { margin-left: auto; display: flex; gap: 3px; padding: 3px; border: 1px solid #cbd2ce; border-radius: 7px; }
+    .states button { padding: 7px 10px; border: 0; border-radius: 4px; background: transparent; color: #69736e; font-size: 10px; cursor: pointer; }
+    .states button.active { background: #173c32; color: #fff; font-weight: 800; }
+    main { display: grid; grid-template-columns: repeat(4, 410px); gap: 14px; min-width: 1682px; padding: 16px; }
+    article { overflow: hidden; border: 1px solid #cbd2ce; border-radius: 8px; background: #fff; }
+    .head { display: flex; align-items: center; justify-content: space-between; gap: 10px; height: 60px; padding: 10px 12px; border-bottom: 1px solid #dce1de; }
+    .head b { display: block; font-size: 13px; }
+    .head span { color: #727d77; font-size: 10px; }
+    .head a { color: #235ac4; font-size: 10px; font-weight: 800; text-decoration: none; }
+    .viewport { width: 408px; height: 270px; overflow: hidden; background: #e4e7e5; }
+    iframe { width: 1280px; height: 844px; border: 0; transform: scale(.31875); transform-origin: top left; pointer-events: none; }
+    .note { min-height: 70px; padding: 11px 12px; color: #56615b; font-size: 10px; line-height: 1.55; }
+    .note b { color: #18211d; }
+  </style>
+</head>
+<body>
+  <header><div><h1>DataSays · Evidence Workbench Exploration</h1><p>固定三栏工作台原则，比较四种多轮分析生长方式</p></div><div class="states"><button data-state="0">State 1 · 刚上传</button><button class="active" data-state="1">State 2 · 经营概览</button><button data-state="2">State 3 · 继续追问</button></div></header>
+  <main>
+    <article><div class="head"><div><b>01 · Analysis Canvas</b><span>空间化分析画布</span></div><a href="01-canvas.html?state=1">单独打开</a></div><div class="viewport"><iframe src="01-canvas.html?state=1" title="Analysis Canvas"></iframe></div><div class="note"><b>分析对象沿画布生长。</b> 对话是操作入口，追问生成与已有结果相连的新对象。</div></article>
+    <article><div class="head"><div><b>02 · Analyst Desktop</b><span>专业分析桌面</span></div><a href="02-desktop.html?state=1">单独打开</a></div><div class="viewport"><iframe src="02-desktop.html?state=1" title="Analyst Desktop"></iframe></div><div class="note"><b>稳定、密集、适合长期工作。</b> 每次分析作为文档标签页，右侧检查当前选中结果。</div></article>
+    <article><div class="head"><div><b>03 · Research Thread</b><span>分析研究线程</span></div><a href="03-thread.html?state=1">单独打开</a></div><div class="viewport"><iframe src="03-thread.html?state=1" title="Research Thread"></iframe></div><div class="note"><b>问题与结论按章节积累。</b> 追问成为下一段分析，不会破坏之前的上下文。</div></article>
+    <article><div class="head"><div><b>04 · Artifact Studio</b><span>命令与分析资产</span></div><a href="04-artifacts.html?state=1">单独打开</a></div><div class="viewport"><iframe src="04-artifacts.html?state=1" title="Artifact Studio"></iframe></div><div class="note"><b>对话极轻，结果成为资产。</b> KPI、图表和发现独立保存、组合与复用。</div></article>
+  </main>
+  <script>
+    const buttons = [...document.querySelectorAll('[data-state]')];
+    const frames = [...document.querySelectorAll('iframe')];
+    const links = [...document.querySelectorAll('.head a')];
+    buttons.forEach((button) => button.addEventListener('click', () => {
+      buttons.forEach((item) => item.classList.toggle('active', item === button));
+      frames.forEach((frame) => { const url = new URL(frame.src); url.searchParams.set('state', button.dataset.state); frame.src = url; });
+      links.forEach((link) => { const url = new URL(link.href); url.searchParams.set('state', button.dataset.state); link.href = url; });
+    }));
+  </script>
+</body>
+</html>

@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DataSays · Research Thread</title>
+  <link rel="stylesheet" href="shared.css" />
+  <style>
+    :root { --ink:#222a27; --muted:#707974; --paper:#fff; --canvas:#f6f5f1; --line:#d7d5ce; --blue:#375ca6; --red:#bd5745; --green:#18705a; --note:#f0efe8; }
+    body { background:var(--canvas); }
+    .workspace { display:grid; grid-template-columns:196px minmax(650px,1fr) 270px; grid-template-rows:54px minmax(0,1fr); height:100vh; }
+    .top { grid-column:1/-1; display:flex; align-items:center; gap:22px; padding:0 17px; border-bottom:1px solid var(--line); background:#fff; }
+    .top .thread-title { color:#68716c; font-size:10px; }
+    .top .saved { margin-left:auto; color:var(--green); font-size:9px; font-weight:800; }
+    .outline { overflow:auto; padding:17px 13px; border-right:1px solid var(--line); background:#eeeee9; }
+    .outline h2, .sources h2 { margin:0 0 12px; font-size:11px; }
+    .data-source { margin-bottom:7px; padding:9px; border:1px solid #d0d0ca; background:#fff; }
+    .data-source b { display:block; overflow:hidden; font-size:8px; text-overflow:ellipsis; }
+    .data-source span { color:#7d8581; font-size:8px; }
+    .outline-label { margin:21px 0 8px; color:#7c8580; font-size:8px; font-weight:900; text-transform:uppercase; }
+    .outline-item { position:relative; padding:7px 6px 7px 17px; color:#56605b; font-size:9px; line-height:1.45; }
+    .outline-item::before { content:""; position:absolute; top:11px; left:3px; width:6px; height:6px; border-radius:50%; background:#8ea098; }
+    .outline-item.active { color:var(--blue); font-weight:800; }
+    .outline-item.active::before { background:var(--blue); }
+    .notebook { overflow:auto; padding:30px max(28px, calc((100% - 720px)/2)) 100px; }
+    .empty-note { min-height:540px; align-items:center; justify-content:center; flex-direction:column; text-align:center; }
+    .empty-note .upload { display:flex; gap:10px; margin-bottom:24px; }
+    .empty-note .upload span { padding:9px 11px; border-bottom:2px solid var(--blue); background:#fff; font-size:8px; }
+    .empty-note h1 { margin:0 0 8px; font-family:Georgia,"Songti SC",serif; font-size:28px; font-weight:500; }
+    .empty-note p { max-width:450px; margin:0; color:#6f7773; font-size:10px; line-height:1.6; }
+    .thread { flex-direction:column; }
+    .thread-head { margin-bottom:24px; padding-bottom:16px; border-bottom:1px solid #aaa9a4; }
+    .thread-head h1 { margin:5px 0 7px; font-family:Georgia,"Songti SC",serif; font-size:30px; font-weight:500; letter-spacing:0; }
+    .thread-head p { margin:0; color:#6c746f; font-size:10px; }
+    .chapter { position:relative; margin-bottom:28px; padding-left:34px; }
+    .chapter::before { content:attr(data-step); position:absolute; top:0; left:0; display:grid; place-items:center; width:22px; height:22px; border:1px solid #78837d; border-radius:50%; color:#4f5c55; font-family:Georgia,serif; font-size:10px; }
+    .chapter::after { content:""; position:absolute; top:25px; bottom:-30px; left:11px; width:1px; background:#c9cbc6; }
+    .chapter:last-of-type::after { display:none; }
+    .chapter.followup-only { flex-direction:column; }
+    .chapter-head { display:flex; justify-content:space-between; gap:16px; margin-bottom:12px; }
+    .chapter-head h2 { margin:0; font-family:Georgia,"Songti SC",serif; font-size:19px; font-weight:500; }
+    .chapter-head span { color:#7c8580; font-size:8px; }
+    .question { margin-bottom:13px; padding:10px 12px; border-top:2px solid var(--blue); background:#eef1f7; color:#34403a; font-size:9px; line-height:1.5; }
+    .kpis { display:grid; grid-template-columns:repeat(4,1fr); border-top:1px solid #a9aca6; border-bottom:1px solid #a9aca6; }
+    .kpi { padding:12px 10px; }
+    .kpi + .kpi { border-left:1px solid #d4d5d0; }
+    .kpi span { display:block; min-height:22px; color:#777f7b; font-size:8px; }
+    .kpi strong { font-family:Georgia,serif; font-size:18px; font-weight:500; }
+    .figure { display:grid; grid-template-columns:minmax(0,1fr) 190px; gap:18px; margin-top:15px; }
+    .chart { color:var(--blue); }
+    .caption { padding-top:8px; border-top:2px solid var(--red); }
+    .caption b { display:block; margin-bottom:7px; font-size:9px; }
+    .caption p { margin:0 0 7px; color:#5e6762; font-size:8px; line-height:1.5; }
+    .finding-list { display:grid; grid-template-columns:repeat(3,1fr); margin-top:14px; border-top:1px solid var(--line); }
+    .finding { padding:12px 10px; }
+    .finding + .finding { border-left:1px solid var(--line); }
+    .finding b { color:var(--red); font-size:8px; }
+    .finding p { margin:4px 0 0; color:#5c6661; font-size:8px; line-height:1.5; }
+    .diagnosis-note { border-top:1px solid #aaa9a4; border-bottom:1px solid #aaa9a4; }
+    .comparison { display:grid; grid-template-columns:1fr 1fr 1fr; }
+    .comparison div { padding:13px; }
+    .comparison div + div { border-left:1px solid var(--line); }
+    .comparison span { display:block; color:#737c77; font-size:8px; }
+    .comparison strong { display:block; margin:5px 0; font-family:Georgia,serif; font-size:19px; font-weight:500; }
+    .comparison small { color:#69736e; font-size:8px; line-height:1.4; }
+    .boundary { margin-top:12px; padding:11px; background:var(--note); color:#5e6662; font-size:8px; line-height:1.55; }
+    .ask { margin-top:8px; padding:12px; border:1px solid #babdb8; background:#fff; }
+    .ask span { display:block; margin-bottom:7px; color:#7c8580; font-size:8px; }
+    .ask div { display:flex; gap:8px; }
+    .ask input { flex:1; border:0; outline:0; font-size:9px; }
+    .ask button { border:0; background:transparent; color:var(--blue); font-size:9px; font-weight:800; }
+    .sources { overflow:auto; padding:17px 14px; border-left:1px solid var(--line); background:#fff; }
+    .source-empty { min-height:430px; align-items:center; justify-content:center; color:#868e8a; font-size:9px; text-align:center; }
+    .source-list { flex-direction:column; }
+    .source { padding:10px 0; border-top:1px solid #dfdfda; }
+    .source sup { color:var(--red); font-weight:900; }
+    .source b { display:block; font-size:9px; }
+    .source p { margin:4px 0 0; color:#707975; font-size:8px; line-height:1.45; }
+    .source .status { color:var(--green); font-weight:800; }
+    .source.followup-only { flex-direction:column; }
+    details { margin-top:13px; border-top:1px solid var(--line); }
+    summary { padding:10px 0; list-style:none; font-size:9px; font-weight:800; cursor:pointer; }
+    summary::after { content:"+"; float:right; }
+    .detail { padding-bottom:10px; color:#717a75; font-size:8px; line-height:1.5; }
+    @media (max-width:760px) {
+      .workspace { display:block; height:auto; }
+      .top { position:sticky; top:0; z-index:10; height:54px; }
+      .top .thread-title, .top .saved { display:none; }
+      .outline { border-right:0; border-bottom:1px solid var(--line); }
+      .outline .outline-label, .outline .outline-item { display:none !important; }
+      .notebook { padding:20px 14px 90px; }
+      .thread-head h1 { font-size:25px; }
+      .chapter { padding-left:0; }
+      .chapter::before, .chapter::after { display:none; }
+      .kpis { grid-template-columns:repeat(2,1fr); }
+      .kpi:nth-child(3) { border-top:1px solid var(--line); border-left:0; }
+      .kpi:nth-child(4) { border-top:1px solid var(--line); }
+      .figure { display:block; }
+      .caption { margin-top:12px; }
+      .finding-list, .comparison { grid-template-columns:1fr; }
+      .finding + .finding, .comparison div + div { border-top:1px solid var(--line); border-left:0; }
+      .sources { border-top:1px solid var(--line); border-left:0; }
+    }
+  </style>
+</head>
+<body data-state="1">
+  <div class="state-switcher"><button data-set-state="0">1 刚上传</button><button data-set-state="1">2 经营概览</button><button data-set-state="2">3 继续追问</button></div>
+  <div class="workspace">
+    <header class="top"><div class="brand"><span class="brand-mark">D</span>DataSays</div><span class="thread-title">Research Thread · 2017 Business Review</span><span class="saved">Saved continuously</span></header>
+    <aside class="outline"><h2>Research Map</h2><div class="data-source"><b>olist_orders_2017.csv</b><span>15K rows</span></div><div class="data-source"><b>olist_order_payments_2017.csv</b><span>16K rows</span></div><div class="outline-label">Thread outline</div><div class="outline-item empty-only active">Data profile</div><div class="outline-item analysis-on active">01 · Executive Snapshot</div><div class="outline-item analysis-on">Metrics & monthly trend</div><div class="outline-item analysis-on">Three findings</div><div class="outline-item followup-only active">02 · November peak diagnosis</div><div class="outline-label">Working notes</div><div class="outline-item">Assumptions</div><div class="outline-item">Open questions</div></aside>
+
+    <main class="notebook">
+      <section class="empty-note empty-only"><div class="upload"><span>Orders · profiled</span><span>Payments · profiled</span></div><h1>开始一条分析线程</h1><p>每次分析会成为一个可引用章节。后续追问沿着原结论继续生长，同时保留来源、边界与验证状态。</p></section>
+      <section class="thread analysis-on"><header class="thread-head"><span class="eyebrow">Analysis thread · Olist 2017</span><h1>经营表现与增长来源</h1><p>由用户问题、计算证据和后续追问共同形成的持续分析记录。</p></header><article class="chapter" data-step="1"><div class="chapter-head"><h2>2017 年经营概览</h2><span class="verified">Evidence complete</span></div><div class="question">问题：分析已交付订单量、Payment GMV、AOV、交付率与月度趋势。</div><div class="kpis"><div class="kpi"><span>Delivered Orders</span><strong>14,429</strong></div><div class="kpi"><span>Payment GMV</span><strong>R$2.32M</strong></div><div class="kpi"><span>AOV</span><strong>R$160.82</strong></div><div class="kpi"><span>Delivery Rate</span><strong>96.19%</strong></div></div><div class="figure"><div class="chart"><svg class="chart-svg" viewBox="0 0 560 210"><line class="chart-grid" x1="20" y1="180" x2="540" y2="180"/><line class="chart-grid" x1="20" y1="115" x2="540" y2="115"/><line class="chart-grid" x1="20" y1="50" x2="540" y2="50"/><path class="chart-area" d="M20 174 L67 146 L114 125 L161 133 L208 101 L255 115 L302 97 L349 89 L396 78 L443 64 L490 23 L537 51 L537 180 L20 180Z"/><path class="chart-line" d="M20 174 L67 146 L114 125 L161 133 L208 101 L255 115 L302 97 L349 89 L396 78 L443 64 L490 23 L537 51"/><circle class="chart-peak" cx="490" cy="23" r="5"/></svg></div><div class="caption"><b>Figure 1 · Monthly GMV</b><p>Payment GMV 使用 delivered population。</p><p>Delivery Rate 保留 all-orders denominator。</p></div></div><div class="finding-list"><div class="finding"><b>01</b><p>11 月 GMV 达全年峰值。</p></div><div class="finding"><b>02</b><p>月度履约率总体稳定。</p></div><div class="finding"><b>03</b><p>AOV 相对稳定，规模增长主要来自订单量。</p></div></div></article><article class="chapter followup-only" data-step="2"><div class="chapter-head"><h2>11 月峰值诊断</h2><span class="verified">Observation grounded</span></div><div class="question">追问：为什么 11 月 GMV 最高？</div><div class="diagnosis-note"><div class="comparison"><div><span>November GMV</span><strong>R$394.76K</strong><small>Q4 占比 41.81%</small></div><div><span>Order volume</span><strong>+60.30%</strong><small>较 10 月，主要贡献</small></div><div><span>AOV</span><strong>-7.09%</strong><small>较 10 月，未推动峰值</small></div></div></div><div class="boundary"><b>观察：</b> 峰值由订单量增加推动。<br><b>边界：</b> 当前数据缺少促销、品类和流量信息，不能把订单量增加归因于某个经营动作。</div></article><div class="ask"><span>Continue this thread</span><div><input value="为什么 11 月 GMV 最高？" aria-label="继续提问"/><button>Analyze ↗</button></div></div></section>
+    </main>
+
+    <aside class="sources"><h2>Evidence Notes</h2><div class="source-empty empty-only">分析开始后，引用、指标口径与验证记录会出现在这里。</div><div class="source-list analysis-on"><div class="source"><sup>1</sup><b>Payment GMV</b><p>R$2,320,454.39 · delivered population</p><p class="status">Validated</p></div><div class="source"><sup>2</sup><b>Delivery Rate</b><p>14,429 / 15,000 · all-orders baseline</p><p class="status">Validated</p></div><div class="source"><sup>3</sup><b>Join policy</b><p>Payments aggregated by order_id before left join.</p></div><div class="source followup-only"><sup>4</sup><b>November diagnosis</b><p>2,435 orders · R$162.12 AOV · R$394.76K GMV</p></div><details><summary>AnalysisPlan</summary><div class="detail">Scope、metrics、time grain、filters 与 join。</div></details><details><summary>Validation</summary><div class="detail">Execution pass · structured Evidence coverage complete.</div></details><details><summary>Developer Trace</summary><div class="detail">默认不展开，仅在调试时显示节点日志。</div></details></div></aside>
+  </div>
+  <script src="shared.js"></script>
+</body>
+</html>
