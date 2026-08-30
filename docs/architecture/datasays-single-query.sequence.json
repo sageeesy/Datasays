@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "DataSays 单次分析请求生命周期",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "column_fit": "spread",
+    "viewBox": [1080, 680]
+  },
+  "participants": [
+    { "id": "analyst", "type": "external", "label": "分析用户", "sublabel": "question + file IDs" },
+    { "id": "web", "type": "frontend", "label": "React UI", "sublabel": "chat + dashboard" },
+    { "id": "query", "type": "backend", "label": "Query API", "sublabel": "FastAPI + SSE" },
+    { "id": "agent", "type": "backend", "label": "Agent Graph", "sublabel": "LangGraph state" },
+    { "id": "llm", "type": "cloud", "label": "LLM", "sublabel": "OpenRouter API" },
+    { "id": "sandbox", "type": "security", "label": "Sandbox", "sublabel": "Docker / Python" },
+    { "id": "gates", "type": "backend", "label": "Checks", "sublabel": "deterministic gates" },
+    { "id": "state", "type": "database", "label": "Local State", "sublabel": "files + SQLite" }
+  ],
+  "segments": [
+    { "from": 150, "to": 304, "label": "准备可验证上下文" },
+    { "from": 318, "to": 472, "label": "计划、隔离计算与验证" },
+    { "from": 486, "to": 620, "label": "忠实回答与持久化" }
+  ],
+  "messages": [
+    { "id": "ask", "from": "analyst", "to": "web", "y": 174, "label": "提交问题与 file IDs", "variant": "emphasis" },
+    { "id": "start_stream", "from": "web", "to": "query", "y": 210, "label": "POST /api/query/stream", "variant": "emphasis" },
+    { "id": "prepare", "from": "query", "to": "state", "y": 246, "label": "验证文件、保存问题、构建有界记忆" },
+    { "id": "start_graph", "from": "query", "to": "agent", "y": 282, "label": "AgentState + context；启动 StateGraph", "variant": "emphasis" },
+    { "id": "plan", "from": "agent", "to": "llm", "y": 332, "label": "profile + metrics + skills → plan / Python", "variant": "emphasis" },
+    { "id": "plan_result", "from": "llm", "to": "agent", "y": 368, "label": "AnalysisPlan + result-contract code", "variant": "return" },
+    { "id": "execute", "from": "agent", "to": "sandbox", "y": 404, "label": "policy check 后隔离执行 CSV", "variant": "security" },
+    { "id": "artifact", "from": "sandbox", "to": "agent", "y": 440, "label": "status + output + AnalysisResult", "variant": "return" },
+    { "id": "validate", "from": "agent", "to": "gates", "y": 476, "label": "plan、artifact、Evidence 与数值忠实性", "variant": "security" },
+    { "id": "repair", "from": "agent", "to": "llm", "y": 504, "label": "仅对可修复问题有界重试；整理回答", "variant": "dashed" },
+    { "id": "final_result", "from": "agent", "to": "query", "y": 536, "label": "response + trace；Query API 持久化 exchange", "variant": "emphasis" },
+    { "id": "sse", "from": "query", "to": "web", "y": 568, "label": "SSE result envelope", "variant": "return" },
+    { "id": "render", "from": "web", "to": "analyst", "y": 596, "label": "呈现 answer、KPI、chart、Evidence 与 Trace", "variant": "return" }
+  ],
+  "activations": [
+    { "participant": "web", "from": 168, "to": 606, "type": "frontend" },
+    { "participant": "query", "from": 204, "to": 578, "type": "backend" },
+    { "participant": "agent", "from": 276, "to": 546, "type": "backend" },
+    { "participant": "state", "from": 240, "to": 252, "type": "database" },
+    { "participant": "llm", "from": 326, "to": 510, "type": "cloud" },
+    { "participant": "sandbox", "from": 398, "to": 446, "type": "security" },
+    { "participant": "gates", "from": 470, "to": 482, "type": "backend" }
+  ]
+}

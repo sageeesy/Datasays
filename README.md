@@ -46,6 +46,36 @@ The Resolved Metric Contract (RMC) combines reusable metric knowledge, project-l
 
 The workflow is implemented with LangGraph, FastAPI, and Pydantic contracts, but the product boundary is the evidence-first workflow rather than any individual framework.
 
+## Architecture
+
+DataSays separates analysis planning, sandboxed execution, structured evidence, and deterministic validation so that an answer can be traced back to its data and computation.
+
+> GitHub displays the static previews below, but its repository file viewer does not execute standalone HTML. After cloning, open the linked HTML files locally for the interactive diagrams. To make them interactive on the web, the minimal option is to publish `docs/architecture/` with GitHub Pages.
+
+### Runtime Architecture
+
+How the frontend, API, agent runtime, model services, sandbox, validation, and local state work together.
+
+<img src="docs/architecture/previews/runtime-architecture.png" alt="DataSays runtime architecture preview" width="720">
+
+[Open interactive diagram](docs/architecture/datasays-runtime.html) · HTML; open locally after cloning
+
+### Evidence & Data Lineage
+
+How a business question is grounded, computed, validated, and transformed into a traceable answer.
+
+<img src="docs/architecture/previews/evidence-data-lineage.png" alt="DataSays evidence and data lineage preview" width="720">
+
+[Open interactive diagram](docs/architecture/datasays-evidence-lineage.html) · HTML; open locally after cloning
+
+### Single Query Lifecycle
+
+What happens during one analysis request, from question submission to verified result delivery.
+
+<img src="docs/architecture/previews/single-query-lifecycle.png" alt="DataSays single query lifecycle preview" width="720">
+
+[Open interactive diagram](docs/architecture/datasays-single-query.html) · HTML; open locally after cloning
+
 ## Analysis Capabilities
 
 | Capability | Status | Current evidence |

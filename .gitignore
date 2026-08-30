@@ -57,6 +57,7 @@ build/
 .vscode/*
 !.vscode/extensions.json
 .idea
+.obsidian/
 .virtual_documents/
 .DS_Store
 **/.DS_Store
@@ -72,6 +73,9 @@ Thumbs.db
 *.temp
 *.deps_installed
 server/.deps_installed
+
+# Generated architecture QA captures (regenerate with Archify visual-check)
+docs/architecture/*.visual-check.*
 
 # Documentation (keep only in docs/)
 # Don't ignore docs/ directory, but ignore duplicate docs in root

@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "DataSays Evidence & Data Lineage",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "viewBox": [1080, 620]
+  },
+  "stages": [
+    { "label": "Evidence Inputs" },
+    { "label": "Grounding" },
+    { "label": "Analysis" },
+    { "label": "Verification" },
+    { "label": "Verified UI" }
+  ],
+  "nodes": [
+    { "id": "question", "type": "external", "label": "Business Question", "sublabel": "intent + KPI scope", "stage": 0, "row": 0, "tag": "scope" },
+    { "id": "csv", "type": "database", "label": "Uploaded CSV", "sublabel": "tabular rows", "stage": 0, "row": 2, "tag": "source" },
+    { "id": "context", "type": "backend", "label": "Analysis Context", "sublabel": "metrics + memory", "stage": 1, "row": 0, "tag": "grounded" },
+    { "id": "file_evidence", "type": "database", "label": "File Evidence", "sublabel": "rows + profile", "stage": 1, "row": 2, "tag": "observed" },
+    { "id": "plan", "type": "backend", "label": "AnalysisPlan", "sublabel": "steps + outputs", "stage": 2, "row": 0, "tag": "contract" },
+    { "id": "code", "type": "backend", "label": "Generated Python", "sublabel": "grounded code", "stage": 2, "row": 1, "tag": "bounded" },
+    { "id": "result", "type": "security", "label": "AnalysisResult", "sublabel": "rows + evidence", "stage": 2, "row": 2, "tag": "sandboxed" },
+    { "id": "artifact_gate", "type": "security", "label": "Artifact Gate", "sublabel": "schema + metric checks", "stage": 3, "row": 0, "tag": "deterministic" },
+    { "id": "answer_gate", "type": "security", "label": "Answer Gate", "sublabel": "numeric faithfulness", "stage": 3, "row": 1, "tag": "deterministic" },
+    { "id": "verified_answer", "type": "frontend", "label": "Verified Answer", "sublabel": "grounded narrative", "stage": 4, "row": 0, "tag": "trusted" },
+    { "id": "evidence_ui", "type": "frontend", "label": "Evidence Workspace", "sublabel": "KPI + chart + trace", "stage": 4, "row": 2, "tag": "inspectable" }
+  ],
+  "flows": [
+    { "id": "question_context", "from": "question", "to": "context", "label": "intent + KPI scope", "classification": "user request", "variant": "emphasis" },
+    { "id": "csv_evidence", "from": "csv", "to": "file_evidence", "label": "rows + metadata", "classification": "source evidence", "variant": "emphasis" },
+    { "id": "evidence_context", "from": "file_evidence", "to": "context", "label": "headers / types / quality", "classification": "observed schema", "variant": "default", "labelAt": [315, 428] },
+    { "id": "context_plan", "from": "context", "to": "plan", "label": "metrics + memory + skills", "classification": "grounded context", "variant": "emphasis", "labelAt": [423, 105] },
+    { "id": "plan_code", "from": "plan", "to": "code", "label": "executable contract", "classification": "planned work", "variant": "default", "labelAt": [530, 214] },
+    { "id": "evidence_code", "from": "file_evidence", "to": "code", "label": "read-only file + schema", "classification": "bounded input", "variant": "security" },
+    { "id": "code_result", "from": "code", "to": "result", "label": "sandbox output", "classification": "structured result", "variant": "security", "labelAt": [555, 340] },
+    { "id": "plan_gate", "from": "plan", "to": "artifact_gate", "label": "required fields", "classification": "validation contract", "variant": "default", "route": "straight", "fromSide": "right", "toSide": "left", "labelAt": [638, 105] },
+    { "id": "result_gate", "from": "result", "to": "artifact_gate", "label": "rows / datasets / evidence", "classification": "computed evidence", "variant": "security", "labelAt": [638, 314] },
+    { "id": "artifact_answer", "from": "artifact_gate", "to": "answer_gate", "label": "validated facts", "classification": "allowed claims", "variant": "emphasis", "labelAt": [745, 214] },
+    { "id": "answer_verified", "from": "answer_gate", "to": "verified_answer", "label": "faithful narrative", "classification": "verified output", "variant": "emphasis" },
+    { "id": "result_ui", "from": "result", "to": "evidence_ui", "label": "datasets + visualizations + trace", "classification": "inspectable evidence", "variant": "emphasis", "route": "straight", "fromSide": "right", "toSide": "left", "labelAt": [852, 340] },
+    { "id": "verified_ui", "from": "verified_answer", "to": "evidence_ui", "label": "KPI + findings", "classification": "presentation", "variant": "default", "labelAt": [960, 270] }
+  ]
+}

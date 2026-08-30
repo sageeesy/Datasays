@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "diagram_type": "lifecycle",
+  "meta": {
+    "title": "DataSays Analysis Lifecycle",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "viewBox": [1080, 620]
+  },
+  "lanes": [
+    { "id": "main", "label": "Main analysis path" },
+    { "id": "exception", "label": "Interruption, repair & stop" }
+  ],
+  "states": [
+    { "id": "accepted", "type": "start", "label": "Accepted", "sublabel": "question + files", "lane": "main", "col": 0, "step": "01", "tag": "entry" },
+    { "id": "grounding", "type": "active", "label": "Grounding", "sublabel": "profile + memory", "lane": "main", "col": 1, "step": "02", "tag": "evidence" },
+    { "id": "planning", "type": "decision", "label": "Planning", "sublabel": "schema-grounded plan", "lane": "main", "col": 2, "step": "03", "tag": "max 2" },
+    { "id": "analyzing", "type": "active", "label": "Analyzing", "sublabel": "code + sandbox + gates", "lane": "main", "col": 3, "step": "04", "tag": "bounded" },
+    { "id": "completed", "type": "success", "label": "Completed", "sublabel": "verified / safe fallback", "lane": "main", "col": 4, "step": "05", "tag": "grounded" },
+    { "id": "clarification", "type": "waiting", "label": "Needs Clarification", "sublabel": "material ambiguity", "lane": "exception", "col": 0, "tag": "wait" },
+    { "id": "repair_gate", "type": "decision", "label": "Repair Gate", "sublabel": "failure + retry budget", "lane": "exception", "col": 1, "tag": "bounded" },
+    { "id": "analysis_stopped", "type": "failure", "label": "Analysis Stopped", "sublabel": "unrecoverable", "lane": "exception", "col": 2, "tag": "terminal" }
+  ],
+  "transitions": [
+    { "id": "planning_clarification", "from": "planning", "to": "clarification", "label": "material ambiguity", "variant": "default", "route": "drop" },
+    { "id": "analysis_repair", "from": "analyzing", "to": "repair_gate", "label": "validation failed", "variant": "security", "route": "drop" },
+    { "id": "repair_retry", "from": "repair_gate", "to": "analyzing", "label": "repairable + budget", "variant": "emphasis", "fromSide": "right", "toSide": "right", "via": [[635, 307], [635, 157]], "labelAt": [690, 230] },
+    { "id": "analysis_stopped", "from": "repair_gate", "to": "analysis_stopped", "label": "no repair / budget", "variant": "security", "fromSide": "bottom", "toSide": "bottom", "via": [[556, 370], [710, 370]], "labelAt": [633, 390] }
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "DataSays 运行时架构",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "viewBox": [1120, 620]
+  },
+  "layout": {
+    "mode": "grid",
+    "origin": [34, 82],
+    "cols": 6,
+    "gapX": 24,
+    "gapY": 58,
+    "cellW": 154,
+    "cellH": 88
+  },
+  "components": [
+    { "id": "context", "type": "backend", "label": "Context Layer", "sublabel": "profile + memory", "row": 0, "col": 3 },
+    { "id": "analyst", "type": "external", "label": "分析用户", "sublabel": "browser", "row": 1, "col": 0 },
+    { "id": "web", "type": "frontend", "label": "React Workspace", "sublabel": "chat + verified dashboard", "row": 1, "col": 1 },
+    { "id": "api", "type": "backend", "label": "FastAPI", "sublabel": "files / query / chat", "row": 1, "col": 2 },
+    { "id": "agent", "type": "backend", "label": "Agent Graph", "sublabel": "LangGraph StateGraph", "row": 1, "col": 3 },
+    { "id": "model_services", "type": "backend", "label": "Model Services", "sublabel": "plan / code / answer", "row": 1, "col": 4 },
+    { "id": "openrouter", "type": "cloud", "label": "OpenRouter", "sublabel": "LLM API", "row": 1, "col": 5 },
+    { "id": "conversation_db", "type": "database", "label": "Conversation DB", "sublabel": "SQLite messages + runs", "row": 2, "col": 1 },
+    { "id": "checkpoint_db", "type": "database", "label": "Checkpoint DB", "sublabel": "LangGraph SQLite", "row": 2, "col": 2 },
+    { "id": "validator", "type": "backend", "label": "Validation Layer", "sublabel": "artifact + answer checks", "row": 2, "col": 3 },
+    { "id": "sandbox", "type": "security", "label": "Python Sandbox", "sublabel": "Docker / direct mode", "row": 2, "col": 4 },
+    { "id": "file_store", "type": "database", "label": "File Store", "sublabel": "CSV + metadata + profiles", "row": 2, "col": 5 }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "Agent API runtime", "wraps": ["api", "agent", "context", "model_services", "validator"], "pad": 20 },
+    { "kind": "security-group", "label": "Execution trust boundary", "wraps": ["sandbox"], "pad": 18 },
+    { "kind": "region", "label": "Local persistent state", "wraps": ["conversation_db", "checkpoint_db", "file_store"], "pad": 18 }
+  ],
+  "connections": [
+    { "id": "ask", "from": "analyst", "to": "web", "label": "question + file IDs", "variant": "emphasis", "labelDy": -24 },
+    { "id": "http_sse", "from": "web", "to": "api", "label": "HTTP + SSE", "variant": "emphasis" },
+    { "id": "run_agent", "from": "api", "to": "agent", "label": "run / progress / result", "variant": "emphasis", "labelDy": -17 },
+    { "id": "build_context", "from": "agent", "to": "context", "label": "ground analysis context", "labelDy": -30 },
+    { "id": "model_tasks", "from": "agent", "to": "model_services", "label": "plan / code / wording", "labelDy": -17 },
+    { "id": "llm_api", "from": "model_services", "to": "openrouter", "label": "HTTPS chat completions", "labelDy": -24 },
+    { "id": "validate", "from": "agent", "to": "validator", "label": "deterministic gates", "variant": "security", "labelDy": 24 },
+    { "id": "execute", "from": "agent", "to": "sandbox", "label": "generated Python", "variant": "security" },
+    { "id": "persist_exchange", "from": "api", "to": "conversation_db", "label": "messages + analysis runs" },
+    { "id": "persist_state", "from": "agent", "to": "checkpoint_db", "label": "node checkpoints", "variant": "dashed" },
+    { "id": "sandbox_files", "from": "sandbox", "to": "file_store", "label": "read-only CSV copy", "variant": "security", "labelAt": [895, 448] }
+  ]
+}
